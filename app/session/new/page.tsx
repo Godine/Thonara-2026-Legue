@@ -35,8 +35,13 @@ export default function NewSessionPage() {
       .from('players')
       .select('id, username')
 
-    if (playerErr || !players?.length) {
-      setError('Could not load players. Make sure you ran the setup SQL in Supabase.')
+    if (playerErr) {
+      setError(`Database error: "${playerErr.message}" — check your Supabase URL and anon key in Vercel environment variables.`)
+      setLoading(false)
+      return
+    }
+    if (!players?.length) {
+      setError('Players table is empty — run the setup SQL in Supabase SQL Editor.')
       setLoading(false)
       return
     }
