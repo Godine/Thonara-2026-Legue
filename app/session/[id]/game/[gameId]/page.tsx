@@ -32,6 +32,21 @@ function getStats(shots: Shot[], playerId: string): PlayerStats {
   }
 }
 
+function computeOdds(p1: PlayerStats, p2: PlayerStats): { p1: number; p2: number } {
+  if (p1.shots === 0 && p2.shots === 0) return { p1: 50, p2: 50 }
+  // In English 8-ball: pot 7 group balls + black = 8 pots to win
+  const p1Remaining = Math.max(1, 8 - p1.potted)
+  const p2Remaining = Math.max(1, 8 - p2.potted)
+  // Laplace-smoothed accuracy (avoids 0% with no shots)
+  const p1Acc = (p1.potted + 1) / (p1.shots + 2)
+  const p2Acc = (p2.potted + 1) / (p2.shots + 2)
+  const p1Score = (1 / p1Remaining) * p1Acc
+  const p2Score = (1 / p2Remaining) * p2Acc
+  const total = p1Score + p2Score
+  const p1Pct = Math.round((p1Score / total) * 100)
+  return { p1: p1Pct, p2: 100 - p1Pct }
+}
+
 type ShotType = 'potted' | 'lucky' | 'miss' | 'error'
 
 interface EndGameState {
@@ -51,7 +66,6 @@ export default function GamePage() {
   const [currentUsername, setCurrentUsername] = useState<PlayerUsername | null>(null)
   const [saving, setSaving] = useState(false)
   const [endGame, setEndGame] = useState<EndGameState>({ open: false, winnerId: '', blackBall: false })
-  const [isLocked, setIsLocked] = useState(false)
   const [flash, setFlash] = useState<{ playerId: string; type: ShotType } | null>(null)
 
   const fetchGame = useCallback(async () => {
@@ -67,20 +81,10 @@ export default function GamePage() {
         .eq('game_id', gameId)
         .order('shot_number', { ascending: true }),
     ])
-    if (gameData) {
-      setGame(gameData as GameFull)
-      const { data: sessionData } = await supabase
-        .from('sessions')
-        .select('created_at')
-        .eq('id', sessionId)
-        .single()
-      if (sessionData) {
-        setIsLocked(Date.now() - new Date(sessionData.created_at).getTime() > 7 * 24 * 60 * 60 * 1000)
-      }
-    }
+    if (gameData) setGame(gameData as GameFull)
     if (shotsData) setShots(shotsData as Shot[])
     setLoading(false)
-  }, [gameId, sessionId])
+  }, [gameId])
 
   useEffect(() => {
     setCurrentUsername(getStoredPlayer())
@@ -95,9 +99,7 @@ export default function GamePage() {
     return () => { supabase.removeChannel(channel) }
   }, [gameId, fetchGame])
 
-  const schedule = game ? GAME_SCHEDULE.find(g => g.gameNumber === game.game_number) : null
-  const isScorer = schedule?.scorer === currentUsername
-  const canEdit = isScorer && !isLocked && !game?.is_complete
+  const canEdit = !!currentUsername && !game?.is_complete
 
   const recordShot = async (playerId: string, type: ShotType) => {
     if (!canEdit || saving) return
@@ -158,6 +160,8 @@ export default function GamePage() {
   const p2Style = PLAYER_STYLES[p2.username as PlayerUsername]
   const p1Stats = getStats(shots, p1.id)
   const p2Stats = getStats(shots, p2.id)
+  const odds = computeOdds(p1Stats, p2Stats)
+  const schedule = game ? GAME_SCHEDULE.find(g => g.gameNumber === game.game_number) : null
 
   const shotButtons: { type: ShotType; label: string; icon: string; classes: string }[] = [
     { type: 'potted', label: 'POT',   icon: '●', classes: 'bg-pool-green-bright/20 border-pool-green-bright/50 text-pool-green-bright hover:bg-pool-green-bright/30 active:bg-pool-green-bright/40' },
@@ -188,19 +192,19 @@ export default function GamePage() {
             </span>
           )}
         </div>
-        {schedule && !game.is_complete && (
+        {!game.is_complete && (
           <p className="text-xs font-body text-pool-chalk-dim mt-1">
-            {isScorer
-              ? '📝 You are scoring this game'
-              : `📱 ${PLAYER_STYLES[schedule.scorer as PlayerUsername]?.label} is scoring · watching live`}
+            {currentUsername
+              ? `📝 Scoring as ${PLAYER_STYLES[currentUsername]?.label}`
+              : `📱 ${schedule ? `${PLAYER_STYLES[schedule.scorer as PlayerUsername]?.label} scoring` : 'Watching live'} — tap a player above to score`}
           </p>
         )}
         <div className="mt-2 h-px bg-gradient-to-r from-pool-gold/30 to-transparent" />
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 px-4 mb-3">
-        {[{ player: p1, stats: p1Stats, style: p1Style }, { player: p2, stats: p2Stats, style: p2Style }].map(({ player, stats, style }) => {
+      {/* Stats cards */}
+      <div className="grid grid-cols-2 gap-3 px-4 mb-2">
+        {[{ player: p1, stats: p1Stats, style: p1Style, oddsVal: odds.p1 }, { player: p2, stats: p2Stats, style: p2Style, oddsVal: odds.p2 }].map(({ player, stats, style, oddsVal }) => {
           const isWinner = game.winner_id === player.id
           return (
             <div key={player.id} className={`rounded-2xl border p-3 transition-all ${isWinner ? 'bg-pool-gold/10 border-pool-gold/50 glow-gold' : 'bg-pool-surface border-pool-border'}`}>
@@ -225,6 +229,18 @@ export default function GamePage() {
               {stats.shots > 0 && (
                 <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
                   <div className="h-full rounded-full transition-all duration-300" style={{ width: `${Math.round((stats.potted / stats.shots) * 100)}%`, backgroundColor: style?.color }} />
+                </div>
+              )}
+              {/* Win odds */}
+              {!game.is_complete && (p1Stats.shots + p2Stats.shots > 0) && (
+                <div className="mt-2 pt-2 border-t border-pool-border/50">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-body text-pool-chalk-dim">Win chance</span>
+                    <span className="font-heading text-base" style={{ color: style?.color }}>{oddsVal}%</span>
+                  </div>
+                  <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
+                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${oddsVal}%`, backgroundColor: style?.color }} />
+                  </div>
                 </div>
               )}
             </div>
@@ -279,12 +295,11 @@ export default function GamePage() {
               {game.loser_potted_black && <p className="text-xs font-body text-pool-chalk-dim mt-2">Opponent potted the black ball</p>}
             </div>
           )}
-          {!game.is_complete && !isScorer && (
+          {!game.is_complete && !currentUsername && (
             <div className="text-center py-8">
               <div className="text-3xl mb-3">📱</div>
               <p className="font-body text-pool-chalk-dim text-sm">
-                {schedule ? `${PLAYER_STYLES[schedule.scorer as PlayerUsername]?.label} is scoring` : 'Watching live'}
-                {' — updates appear automatically'}
+                Watching live — updates appear automatically
               </p>
             </div>
           )}

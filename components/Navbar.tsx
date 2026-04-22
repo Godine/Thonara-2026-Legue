@@ -52,6 +52,18 @@ export default function Navbar() {
           >
             History
           </Link>
+          <Link
+            href="/stats"
+            className="text-sm font-body text-pool-chalk-dim hover:text-pool-chalk transition-colors"
+          >
+            Stats
+          </Link>
+          <Link
+            href="/rules"
+            className="text-sm font-body text-pool-chalk-dim hover:text-pool-chalk transition-colors"
+          >
+            Rules
+          </Link>
 
           {style && username && (
             <div className="relative">
