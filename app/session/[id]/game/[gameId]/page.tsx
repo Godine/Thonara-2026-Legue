@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { GAME_SCHEDULE, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
+import { getStoredPlayer } from '@/components/PlayerGate'
 import PlayerBall from '@/components/PlayerBall'
 import type { Game, Player, Shot } from '@/types/database'
 
@@ -47,8 +48,7 @@ export default function GamePage() {
   const [game, setGame] = useState<GameFull | null>(null)
   const [shots, setShots] = useState<Shot[]>([])
   const [loading, setLoading] = useState(true)
-  const [currentUser, setCurrentUser] = useState<string | null>(null)
-  const [currentUsername, setCurrentUsername] = useState<string | null>(null)
+  const [currentUsername, setCurrentUsername] = useState<PlayerUsername | null>(null)
   const [saving, setSaving] = useState(false)
   const [endGame, setEndGame] = useState<EndGameState>({ open: false, winnerId: '', blackBall: false })
   const [isLocked, setIsLocked] = useState(false)
@@ -67,18 +67,15 @@ export default function GamePage() {
         .eq('game_id', gameId)
         .order('shot_number', { ascending: true }),
     ])
-
     if (gameData) {
       setGame(gameData as GameFull)
-      // Check session lock
       const { data: sessionData } = await supabase
         .from('sessions')
         .select('created_at')
         .eq('id', sessionId)
         .single()
       if (sessionData) {
-        const age = Date.now() - new Date(sessionData.created_at).getTime()
-        setIsLocked(age > 7 * 24 * 60 * 60 * 1000)
+        setIsLocked(Date.now() - new Date(sessionData.created_at).getTime() > 7 * 24 * 60 * 60 * 1000)
       }
     }
     if (shotsData) setShots(shotsData as Shot[])
@@ -86,66 +83,42 @@ export default function GamePage() {
   }, [gameId, sessionId])
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      const uid = data.user?.id ?? null
-      setCurrentUser(uid)
-      if (uid) {
-        supabase.from('players').select('username').eq('id', uid).single()
-          .then(({ data: p }) => setCurrentUsername(p?.username ?? null))
-      }
-    })
+    setCurrentUsername(getStoredPlayer())
     fetchGame()
 
-    // Realtime for shots
     const channel = supabase
       .channel(`game-shots-${gameId}`)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'shots',
-        filter: `game_id=eq.${gameId}`,
-      }, () => fetchGame())
-      .on('postgres_changes', {
-        event: 'UPDATE', schema: 'public', table: 'games',
-        filter: `id=eq.${gameId}`,
-      }, () => fetchGame())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shots', filter: `game_id=eq.${gameId}` }, fetchGame)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` }, fetchGame)
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
   }, [gameId, fetchGame])
 
-  const schedule = game
-    ? GAME_SCHEDULE.find(g => g.gameNumber === game.game_number)
-    : null
-
+  const schedule = game ? GAME_SCHEDULE.find(g => g.gameNumber === game.game_number) : null
   const isScorer = schedule?.scorer === currentUsername
   const canEdit = isScorer && !isLocked && !game?.is_complete
 
   const recordShot = async (playerId: string, type: ShotType) => {
     if (!canEdit || saving) return
     setSaving(true)
-
-    // Flash animation
     setFlash({ playerId, type })
-    setTimeout(() => setFlash(null), 400)
-
-    const nextNumber = shots.length + 1
-    const payload = {
+    setTimeout(() => setFlash(null), 350)
+    await supabase.from('shots').insert({
       game_id: gameId,
       player_id: playerId,
       potted: type === 'potted' || type === 'lucky',
       is_lucky: type === 'lucky',
       is_error: type === 'error',
-      shot_number: nextNumber,
-    }
-
-    await supabase.from('shots').insert(payload)
+      shot_number: shots.length + 1,
+    })
     setSaving(false)
   }
 
   const undoLastShot = async () => {
     if (!canEdit || saving || shots.length === 0) return
     setSaving(true)
-    const last = shots[shots.length - 1]
-    await supabase.from('shots').delete().eq('id', last.id)
+    await supabase.from('shots').delete().eq('id', shots[shots.length - 1].id)
     setSaving(false)
   }
 
@@ -225,19 +198,12 @@ export default function GamePage() {
         <div className="mt-2 h-px bg-gradient-to-r from-pool-gold/30 to-transparent" />
       </div>
 
-      {/* Stats cards */}
+      {/* Stats */}
       <div className="grid grid-cols-2 gap-3 px-4 mb-3">
         {[{ player: p1, stats: p1Stats, style: p1Style }, { player: p2, stats: p2Stats, style: p2Style }].map(({ player, stats, style }) => {
           const isWinner = game.winner_id === player.id
           return (
-            <div
-              key={player.id}
-              className={`rounded-2xl border p-3 transition-all ${
-                isWinner
-                  ? 'bg-pool-gold/10 border-pool-gold/50 glow-gold'
-                  : 'bg-pool-surface border-pool-border'
-              }`}
-            >
+            <div key={player.id} className={`rounded-2xl border p-3 transition-all ${isWinner ? 'bg-pool-gold/10 border-pool-gold/50 glow-gold' : 'bg-pool-surface border-pool-border'}`}>
               <div className="flex items-center gap-2 mb-2">
                 {style && <PlayerBall number={style.number} color={style.color} size={28} />}
                 <span className="font-heading text-base tracking-wide" style={{ color: style?.color }}>
@@ -245,60 +211,41 @@ export default function GamePage() {
                 </span>
                 {isWinner && <span className="text-sm">🏆</span>}
               </div>
-              <div className="space-y-1">
-                <div className="flex justify-between items-baseline">
-                  <span className="text-xs font-body text-pool-chalk-dim">Potted</span>
-                  <span className="font-heading text-2xl text-pool-chalk">{stats.potted}</span>
-                </div>
-                <div className="flex justify-between text-xs font-body text-pool-chalk-dim">
-                  <span>Shots: {stats.shots}</span>
-                  <span>
-                    {stats.errors > 0 && <span className="text-pool-red mr-2">{stats.errors} err</span>}
-                    {stats.lucky > 0 && <span className="text-pool-gold">{stats.lucky} ★</span>}
-                  </span>
-                </div>
-                {stats.shots > 0 && (
-                  <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
-                    <div
-                      className="h-full rounded-full transition-all duration-300"
-                      style={{
-                        width: `${Math.round((stats.potted / stats.shots) * 100)}%`,
-                        backgroundColor: style?.color,
-                      }}
-                    />
-                  </div>
-                )}
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs font-body text-pool-chalk-dim">Potted</span>
+                <span className="font-heading text-2xl text-pool-chalk">{stats.potted}</span>
               </div>
+              <div className="flex justify-between text-xs font-body text-pool-chalk-dim">
+                <span>Shots: {stats.shots}</span>
+                <span>
+                  {stats.errors > 0 && <span className="text-pool-red mr-2">{stats.errors} err</span>}
+                  {stats.lucky > 0 && <span className="text-pool-gold">{stats.lucky} ★</span>}
+                </span>
+              </div>
+              {stats.shots > 0 && (
+                <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
+                  <div className="h-full rounded-full transition-all duration-300" style={{ width: `${Math.round((stats.potted / stats.shots) * 100)}%`, backgroundColor: style?.color }} />
+                </div>
+              )}
             </div>
           )
         })}
       </div>
 
-      {/* Shot entry (scorer only, game not complete) */}
+      {/* Shot entry */}
       {canEdit ? (
         <div className="px-4 flex-1 flex flex-col">
-          <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">
-            TAP TO RECORD A SHOT
-          </p>
-
+          <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">TAP TO RECORD A SHOT</p>
           <div className="grid grid-cols-2 gap-3 flex-1">
-            {[
-              { player: p1, stats: p1Stats, style: p1Style },
-              { player: p2, stats: p2Stats, style: p2Style },
-            ].map(({ player, stats, style }) => {
+            {[{ player: p1, style: p1Style }, { player: p2, style: p2Style }].map(({ player, style }) => {
               const isFlashing = flash?.playerId === player.id
               return (
-                <div
-                  key={player.id}
-                  className={`flex flex-col gap-2 transition-all duration-150 ${isFlashing ? 'scale-[0.98] brightness-125' : ''}`}
-                >
-                  {/* Player label */}
+                <div key={player.id} className={`flex flex-col gap-2 transition-all duration-100 ${isFlashing ? 'scale-[0.97] brightness-125' : ''}`}>
                   <div className="text-center py-1">
                     <span className="font-heading text-sm tracking-widest" style={{ color: style?.color }}>
                       {player.display_name.toUpperCase()}
                     </span>
                   </div>
-                  {/* Shot buttons */}
                   {shotButtons.map(btn => (
                     <button
                       key={btn.type}
@@ -314,57 +261,37 @@ export default function GamePage() {
               )
             })}
           </div>
-
-          {/* Bottom bar */}
           <div className="flex gap-3 py-4">
-            <button
-              onClick={undoLastShot}
-              disabled={saving || shots.length === 0}
-              className="flex-1 py-3 rounded-xl border border-pool-border font-heading text-base tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all disabled:opacity-30 active:scale-95"
-            >
+            <button onClick={undoLastShot} disabled={saving || shots.length === 0} className="flex-1 py-3 rounded-xl border border-pool-border font-heading text-base tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all disabled:opacity-30 active:scale-95">
               ↩ UNDO
             </button>
-            <button
-              onClick={() => setEndGame({ open: true, winnerId: p1.id, blackBall: false })}
-              className="flex-1 py-3 rounded-xl bg-pool-gold text-pool-bg font-heading text-base tracking-widest hover:bg-pool-gold-light transition-all active:scale-95 glow-gold"
-            >
+            <button onClick={() => setEndGame({ open: true, winnerId: p1.id, blackBall: false })} className="flex-1 py-3 rounded-xl bg-pool-gold text-pool-bg font-heading text-base tracking-widest hover:bg-pool-gold-light transition-all active:scale-95 glow-gold">
               END GAME ▶
             </button>
           </div>
         </div>
       ) : (
-        /* Read-only view for non-scorers or completed games */
         <div className="px-4 flex-1">
           {game.is_complete && game.winner && (
             <div className="text-center py-6">
               <div className="text-4xl mb-2">🏆</div>
-              <p className="font-heading text-2xl tracking-wider text-pool-gold">
-                {game.winner.display_name.toUpperCase()} WINS!
-              </p>
-              {game.loser_potted_black && (
-                <p className="text-xs font-body text-pool-chalk-dim mt-2">Opponent potted the black ball</p>
-              )}
+              <p className="font-heading text-2xl tracking-wider text-pool-gold">{game.winner.display_name.toUpperCase()} WINS!</p>
+              {game.loser_potted_black && <p className="text-xs font-body text-pool-chalk-dim mt-2">Opponent potted the black ball</p>}
             </div>
           )}
           {!game.is_complete && !isScorer && (
             <div className="text-center py-8">
               <div className="text-3xl mb-3">📱</div>
               <p className="font-body text-pool-chalk-dim text-sm">
-                Watching live — updates appear automatically
-              </p>
-            </div>
-          )}
-          {isLocked && !game.is_complete && (
-            <div className="text-center py-8">
-              <p className="font-body text-pool-chalk-dim text-sm">
-                This session is locked. Contact Adib to make corrections.
+                {schedule ? `${PLAYER_STYLES[schedule.scorer as PlayerUsername]?.label} is scoring` : 'Watching live'}
+                {' — updates appear automatically'}
               </p>
             </div>
           )}
         </div>
       )}
 
-      {/* Shot log (last 5 shots) */}
+      {/* Shot log */}
       {shots.length > 0 && (
         <div className="mx-4 mb-4 bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
           <p className="font-heading text-xs tracking-widest text-pool-chalk-dim px-4 pt-3 pb-2">LAST SHOTS</p>
@@ -391,23 +318,14 @@ export default function GamePage() {
         <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in">
           <div className="w-full max-w-lg bg-pool-surface rounded-t-3xl border-t border-pool-border p-6 animate-slide-up">
             <h2 className="font-heading text-3xl tracking-wider text-pool-chalk text-center mb-6">END GAME</h2>
-
-            {/* Winner selection */}
             <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-3">Who won?</p>
             <div className="grid grid-cols-2 gap-3 mb-5">
               {[p1, p2].map(player => {
                 const style = PLAYER_STYLES[player.username as PlayerUsername]
                 const selected = endGame.winnerId === player.id
                 return (
-                  <button
-                    key={player.id}
-                    onClick={() => setEndGame(e => ({ ...e, winnerId: player.id }))}
-                    className={`py-4 rounded-2xl border-2 font-heading text-xl tracking-wider flex flex-col items-center gap-2 transition-all active:scale-95 ${
-                      selected
-                        ? 'border-pool-gold bg-pool-gold/15 text-pool-gold'
-                        : 'border-pool-border bg-pool-bg text-pool-chalk-dim hover:border-pool-chalk/30'
-                    }`}
-                  >
+                  <button key={player.id} onClick={() => setEndGame(e => ({ ...e, winnerId: player.id }))}
+                    className={`py-4 rounded-2xl border-2 font-heading text-xl tracking-wider flex flex-col items-center gap-2 transition-all active:scale-95 ${selected ? 'border-pool-gold bg-pool-gold/15 text-pool-gold' : 'border-pool-border bg-pool-bg text-pool-chalk-dim hover:border-pool-chalk/30'}`}>
                     {style && <PlayerBall number={style.number} color={style.color} size={40} />}
                     {player.display_name.toUpperCase()}
                     {selected && <span className="text-sm">🏆</span>}
@@ -415,36 +333,19 @@ export default function GamePage() {
                 )
               })}
             </div>
-
-            {/* Black ball toggle */}
-            <button
-              onClick={() => setEndGame(e => ({ ...e, blackBall: !e.blackBall }))}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border mb-5 transition-all ${
-                endGame.blackBall
-                  ? 'border-pool-red/50 bg-pool-red/10 text-pool-chalk'
-                  : 'border-pool-border bg-pool-bg text-pool-chalk-dim'
-              }`}
-            >
-              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                endGame.blackBall ? 'bg-pool-red border-pool-red' : 'border-pool-chalk-dim'
-              }`}>
+            <button onClick={() => setEndGame(e => ({ ...e, blackBall: !e.blackBall }))}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border mb-5 transition-all ${endGame.blackBall ? 'border-pool-red/50 bg-pool-red/10 text-pool-chalk' : 'border-pool-border bg-pool-bg text-pool-chalk-dim'}`}>
+              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${endGame.blackBall ? 'bg-pool-red border-pool-red' : 'border-pool-chalk-dim'}`}>
                 {endGame.blackBall && <span className="text-xs text-white">✓</span>}
               </div>
               <span className="font-body text-sm">Loser potted the black ball</span>
             </button>
-
             <div className="flex gap-3">
-              <button
-                onClick={() => setEndGame(e => ({ ...e, open: false }))}
-                className="flex-1 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-wider text-pool-chalk-dim hover:text-pool-chalk transition-all"
-              >
+              <button onClick={() => setEndGame(e => ({ ...e, open: false }))} className="flex-1 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-wider text-pool-chalk-dim hover:text-pool-chalk transition-all">
                 CANCEL
               </button>
-              <button
-                onClick={confirmEndGame}
-                disabled={!endGame.winnerId || saving}
-                className="flex-1 py-4 rounded-xl bg-pool-gold text-pool-bg font-heading text-lg tracking-widest hover:bg-pool-gold-light disabled:opacity-40 transition-all active:scale-95 glow-gold"
-              >
+              <button onClick={confirmEndGame} disabled={!endGame.winnerId || saving}
+                className="flex-1 py-4 rounded-xl bg-pool-gold text-pool-bg font-heading text-lg tracking-widest hover:bg-pool-gold-light disabled:opacity-40 transition-all active:scale-95 glow-gold">
                 {saving ? 'SAVING…' : 'CONFIRM'}
               </button>
             </div>

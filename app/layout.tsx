@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Bebas_Neue, Inter } from 'next/font/google'
 import './globals.css'
 import Navbar from '@/components/Navbar'
+import PlayerGate from '@/components/PlayerGate'
 
 const bebasNeue = Bebas_Neue({
   weight: '400',
@@ -18,8 +19,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: 'Thonara 2026 League',
-  description: 'Pool league tracker — Adib, Shin & Godine',
-  manifest: '/manifest.json',
+  description: 'Pool league tracker — Adib, Ahmed & Godine',
 }
 
 export const viewport: Viewport = {
@@ -33,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${bebasNeue.variable} ${inter.variable}`}>
       <body>
+        <PlayerGate />
         <Navbar />
         <main className="min-h-dvh pt-14">
           {children}

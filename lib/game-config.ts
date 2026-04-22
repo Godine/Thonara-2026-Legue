@@ -20,12 +20,4 @@ export const PLAYER_STYLES: Record<PlayerUsername, {
   godine: { color: '#f87171', dimColor: '#7a2020', number: 3, label: 'Godine' },
 }
 
-const EMAIL_MAP: Record<PlayerUsername, string> = {
-  adib:   'adib.benk.pro@gmail.com',
-  ahmed:  'lahlouahmed0@gmail.com',
-  godine: 'lechgar@gmail.com',
-}
-
-export function toEmail(username: string): string {
-  return EMAIL_MAP[username as PlayerUsername] ?? `${username}@thonara.app`
-}
+export const PLAYERS: PlayerUsername[] = ['adib', 'ahmed', 'godine']
