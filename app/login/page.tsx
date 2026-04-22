@@ -20,7 +20,7 @@ export default function LoginPage() {
     setLoading(true)
 
     const trimmed = username.trim().toLowerCase()
-    if (!['adib', 'shin', 'godine'].includes(trimmed)) {
+    if (!['adib', 'ahmed', 'godine'].includes(trimmed)) {
       setError('Unknown player name.')
       setLoading(false)
       return
@@ -89,7 +89,7 @@ export default function LoginPage() {
                 type="text"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
-                placeholder="adib / shin / godine"
+                placeholder="adib / ahmed / godine"
                 autoComplete="username"
                 autoCapitalize="none"
                 required
