@@ -32,14 +32,18 @@ function getStats(shots: Shot[], playerId: string): PlayerStats {
   }
 }
 
-function computeOdds(p1: PlayerStats, p2: PlayerStats): { p1: number; p2: number } {
-  if (p1.shots === 0 && p2.shots === 0) return { p1: 50, p2: 50 }
-  // In English 8-ball: pot 7 group balls + black = 8 pots to win
+function computeOdds(
+  p1: PlayerStats, p2: PlayerStats,
+  p1Prior = { shots: 0, potted: 0 },
+  p2Prior = { shots: 0, potted: 0 },
+): { p1: number; p2: number } {
+  const anyShots = p1.shots + p2.shots + p1Prior.shots + p2Prior.shots > 0
+  if (!anyShots) return { p1: 50, p2: 50 }
   const p1Remaining = Math.max(1, 8 - p1.potted)
   const p2Remaining = Math.max(1, 8 - p2.potted)
-  // Laplace-smoothed accuracy (avoids 0% with no shots)
-  const p1Acc = (p1.potted + 1) / (p1.shots + 2)
-  const p2Acc = (p2.potted + 1) / (p2.shots + 2)
+  // Blend current game with all-time prior + Laplace smoothing
+  const p1Acc = (p1.potted + p1Prior.potted + 1) / (p1.shots + p1Prior.shots + 2)
+  const p2Acc = (p2.potted + p2Prior.potted + 1) / (p2.shots + p2Prior.shots + 2)
   const p1Score = (1 / p1Remaining) * p1Acc
   const p2Score = (1 / p2Remaining) * p2Acc
   const total = p1Score + p2Score
@@ -67,6 +71,7 @@ export default function GamePage() {
   const [saving, setSaving] = useState(false)
   const [endGame, setEndGame] = useState<EndGameState>({ open: false, winnerId: '', blackBall: false })
   const [flash, setFlash] = useState<{ playerId: string; type: ShotType } | null>(null)
+  const [histStats, setHistStats] = useState<Record<string, { shots: number; potted: number }>>({})
 
   const fetchGame = useCallback(async () => {
     const [{ data: gameData }, { data: shotsData }] = await Promise.all([
@@ -99,6 +104,26 @@ export default function GamePage() {
     return () => { supabase.removeChannel(channel) }
   }, [gameId, fetchGame])
 
+  // Fetch all-time historical shot accuracy for both players (once, when game loads)
+  useEffect(() => {
+    if (!game) return
+    supabase
+      .from('shots')
+      .select('player_id, potted')
+      .in('player_id', [game.player1.id, game.player2.id])
+      .neq('game_id', gameId)
+      .then(({ data }) => {
+        if (!data) return
+        const acc: Record<string, { shots: number; potted: number }> = {}
+        for (const s of data as { player_id: string; potted: boolean }[]) {
+          if (!acc[s.player_id]) acc[s.player_id] = { shots: 0, potted: 0 }
+          acc[s.player_id].shots++
+          if (s.potted) acc[s.player_id].potted++
+        }
+        setHistStats(acc)
+      })
+  }, [game?.player1.id, game?.player2.id, gameId])
+
   const canEdit = !!currentUsername && !game?.is_complete
 
   const recordShot = async (playerId: string, type: ShotType) => {
@@ -106,21 +131,35 @@ export default function GamePage() {
     setSaving(true)
     setFlash({ playerId, type })
     setTimeout(() => setFlash(null), 350)
-    await supabase.from('shots').insert({
+    const newShotNumber = shots.length + 1
+    const optimistic: Shot = {
+      id: `temp-${Date.now()}`,
       game_id: gameId,
       player_id: playerId,
       potted: type === 'potted' || type === 'lucky',
       is_lucky: type === 'lucky',
       is_error: type === 'error',
-      shot_number: shots.length + 1,
+      shot_number: newShotNumber,
+      created_at: new Date().toISOString(),
+    }
+    setShots(prev => [...prev, optimistic])
+    await supabase.from('shots').insert({
+      game_id: gameId,
+      player_id: playerId,
+      potted: optimistic.potted,
+      is_lucky: optimistic.is_lucky,
+      is_error: optimistic.is_error,
+      shot_number: newShotNumber,
     })
     setSaving(false)
   }
 
   const undoLastShot = async () => {
     if (!canEdit || saving || shots.length === 0) return
+    const lastShot = shots[shots.length - 1]
+    setShots(prev => prev.filter(s => s.id !== lastShot.id))
     setSaving(true)
-    await supabase.from('shots').delete().eq('id', shots[shots.length - 1].id)
+    await supabase.from('shots').delete().eq('id', lastShot.id)
     setSaving(false)
   }
 
@@ -160,7 +199,11 @@ export default function GamePage() {
   const p2Style = PLAYER_STYLES[p2.username as PlayerUsername]
   const p1Stats = getStats(shots, p1.id)
   const p2Stats = getStats(shots, p2.id)
-  const odds = computeOdds(p1Stats, p2Stats)
+  const odds = computeOdds(
+    p1Stats, p2Stats,
+    histStats[p1.id] ?? { shots: 0, potted: 0 },
+    histStats[p2.id] ?? { shots: 0, potted: 0 },
+  )
   const schedule = game ? GAME_SCHEDULE.find(g => g.gameNumber === game.game_number) : null
 
   const shotButtons: { type: ShotType; label: string; icon: string; classes: string }[] = [
@@ -232,7 +275,7 @@ export default function GamePage() {
                 </div>
               )}
               {/* Win odds */}
-              {!game.is_complete && (p1Stats.shots + p2Stats.shots > 0) && (
+              {!game.is_complete && (p1Stats.shots + p2Stats.shots > 0 || Object.keys(histStats).length > 0) && (
                 <div className="mt-2 pt-2 border-t border-pool-border/50">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-body text-pool-chalk-dim">Win chance</span>

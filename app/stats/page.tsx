@@ -141,6 +141,22 @@ export default function StatsPage() {
     idToUsername[g.player2.id] = g.player2.username as PlayerUsername
   }
 
+  // username → playerId (needed for form guide & accuracy trend)
+  const playerIdMap: Partial<Record<PlayerUsername, string>> = {}
+  for (const g of games) {
+    playerIdMap[g.player1.username as PlayerUsername] = g.player1_id
+    playerIdMap[g.player2.username as PlayerUsername] = g.player2_id
+  }
+
+  // Last 5 game results per player (true = win)
+  const form: Record<PlayerUsername, boolean[]> = { adib: [], ahmed: [], godine: [] }
+  for (const u of PLAYERS) {
+    const pid = playerIdMap[u]
+    if (!pid) continue
+    const myGames = games.filter(g => g.player1_id === pid || g.player2_id === pid)
+    form[u] = myGames.slice(-5).map(g => g.winner_id === pid)
+  }
+
   for (const g of games) {
     const p1u = g.player1.username as PlayerUsername
     const p2u = g.player2.username as PlayerUsername
@@ -209,6 +225,23 @@ export default function StatsPage() {
     }
   })
 
+  // ── Accuracy over time per session ───────────────────────────────────────
+
+  const accuracyTrend = sessionOrder.map(sid => {
+    const sessionGameIds = new Set(games.filter(g => g.session_id === sid).map(g => g.id))
+    const sessionShots = shots.filter(s => sessionGameIds.has(s.game_id))
+    const session = games.find(g => g.session_id === sid)?.session
+    const label = session ? format(parseISO(session.date), 'd MMM') : sid.slice(0, 4)
+    const entry: Record<string, number | string | null> = { label }
+    for (const u of PLAYERS) {
+      const pid = playerIdMap[u]
+      if (!pid) { entry[u] = null; continue }
+      const myShots = sessionShots.filter(s => s.player_id === pid)
+      entry[u] = myShots.length > 0 ? Math.round((myShots.filter(s => s.potted).length / myShots.length) * 100) : null
+    }
+    return entry
+  })
+
   // ── Accuracy chart data ───────────────────────────────────────────────────
 
   const accuracyData = PLAYERS.map(u => ({
@@ -216,6 +249,16 @@ export default function StatsPage() {
     'Pot %': pct(playerMap[u].potted, playerMap[u].shots),
     'Error %': pct(playerMap[u].errors, playerMap[u].shots),
     'Lucky %': pct(playerMap[u].lucky, playerMap[u].shots),
+    color: COLORS[u],
+  }))
+
+  // ── Shot efficiency: average pots per game ───────────────────────────────
+
+  const efficiencyData = PLAYERS.map(u => ({
+    name: PLAYER_STYLES[u].label,
+    'Pots/game': playerMap[u].gamesPlayed > 0
+      ? parseFloat((playerMap[u].potted / playerMap[u].gamesPlayed).toFixed(1))
+      : 0,
     color: COLORS[u],
   }))
 
@@ -273,7 +316,17 @@ export default function StatsPage() {
                   <p className="font-heading text-base tracking-wide" style={{ color: style.color }}>
                     {p.displayName.toUpperCase()}
                   </p>
-                  <p className="font-body text-xs text-pool-chalk-dim">{p.gamesPlayed} games played</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="font-body text-xs text-pool-chalk-dim">{p.gamesPlayed} played</span>
+                    {(form[p.username] ?? []).length > 0 && (
+                      <>
+                        <span className="text-pool-chalk-dim text-xs">·</span>
+                        {(form[p.username] ?? []).map((win, j) => (
+                          <span key={j} style={{ color: win ? style.color : '#3a3a35', fontSize: 10, lineHeight: 1 }}>●</span>
+                        ))}
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className="text-right">
                   <p className="font-heading text-2xl text-pool-gold">{p.wins}</p>
@@ -303,6 +356,30 @@ export default function StatsPage() {
               {PLAYERS.map(u => (
                 <Line key={u} type="monotone" dataKey={u} name={PLAYER_STYLES[u].label}
                   stroke={COLORS[u]} strokeWidth={2.5} dot={{ r: 3, fill: COLORS[u] }} activeDot={{ r: 5 }} />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Accuracy over time */}
+      {accuracyTrend.length > 1 && totalShots > 0 && (
+        <div className="bg-pool-surface rounded-2xl border border-pool-border p-4">
+          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-4">ACCURACY OVER TIME</p>
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={accuracyTrend} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+              <XAxis dataKey="label" tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} unit="%" domain={[0, 100]} />
+              <Tooltip
+                contentStyle={{ background: '#1a2018', border: '1px solid #2e3a2b', borderRadius: 8, fontFamily: 'Inter', fontSize: 12 }}
+                labelStyle={{ color: '#c8c4b5', marginBottom: 4 }}
+                itemStyle={{ color: '#c8c4b5' }}
+                formatter={(v: number) => [`${v}%`]}
+              />
+              {PLAYERS.map(u => (
+                <Line key={u} type="monotone" dataKey={u} name={PLAYER_STYLES[u].label}
+                  stroke={COLORS[u]} strokeWidth={2.5} dot={{ r: 3, fill: COLORS[u] }}
+                  activeDot={{ r: 5 }} connectNulls />
               ))}
             </LineChart>
           </ResponsiveContainer>
@@ -357,6 +434,28 @@ export default function StatsPage() {
               )
             })}
           </div>
+        </div>
+      )}
+
+      {/* Shot efficiency */}
+      {totalShots > 0 && (
+        <div className="bg-pool-surface rounded-2xl border border-pool-border p-4">
+          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-1">SHOT EFFICIENCY</p>
+          <p className="font-body text-xs text-pool-chalk-dim mb-4">Average pots per game</p>
+          <ResponsiveContainer width="100%" height={110}>
+            <BarChart layout="vertical" data={efficiencyData} margin={{ top: 0, right: 24, bottom: 0, left: 10 }}>
+              <XAxis type="number" tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" tick={{ fill: '#7a786f', fontSize: 11, fontFamily: 'Inter' }} axisLine={false} tickLine={false} width={48} />
+              <Tooltip
+                contentStyle={{ background: '#1a2018', border: '1px solid #2e3a2b', borderRadius: 8, fontFamily: 'Inter', fontSize: 12 }}
+                itemStyle={{ color: '#c8c4b5' }}
+                formatter={(v: number) => [`${v} pots/game`]}
+              />
+              <Bar dataKey="Pots/game" radius={[0, 4, 4, 0]}>
+                {efficiencyData.map(d => <Cell key={d.name} fill={d.color} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       )}
 
