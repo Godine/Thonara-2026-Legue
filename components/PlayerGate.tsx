@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { PLAYER_STYLES, PLAYERS, type PlayerUsername } from '@/lib/game-config'
+import PlayerAvatar from './PlayerAvatar'
 import PlayerBall from './PlayerBall'
 
 export const PLAYER_KEY = 'thonara_player'
@@ -98,15 +99,15 @@ export default function PlayerGate() {
                   boxShadow: isHovered ? `0 0 28px ${style.color}20` : 'none',
                 }}
               >
-                {/* Ball with glow */}
+                {/* Avatar with glow */}
                 <div className="relative shrink-0">
                   {isHovered && (
                     <div
                       className="absolute inset-0 rounded-full blur-md opacity-50"
-                      style={{ background: style.color }}
+                      style={{ background: style.color, transform: 'scale(1.1)' }}
                     />
                   )}
-                  <PlayerBall number={style.number} color={style.color} size={52} className="relative" />
+                  <PlayerAvatar username={username} size={52} className="relative" />
                 </div>
 
                 {/* Name */}

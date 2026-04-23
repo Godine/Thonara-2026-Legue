@@ -18,8 +18,14 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'Thonara 2026 League',
+  title: 'Thonara League',
   description: 'Pool league tracker — Adib, Ahmed & Godine',
+  appleWebApp: {
+    capable: true,
+    title: 'Thonara League',
+    statusBarStyle: 'black-translucent',
+  },
+  formatDetection: { telephone: false },
 }
 
 export const viewport: Viewport = {
@@ -27,6 +33,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
+  userScalable: false,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

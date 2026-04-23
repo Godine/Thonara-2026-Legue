@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import PlayerBall from '@/components/PlayerBall'
+import PlayerAvatar from '@/components/PlayerAvatar'
 import { PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import type { LeagueStanding, Session, Game, Player } from '@/types/database'
 
@@ -78,7 +78,7 @@ export default async function Dashboard() {
                       {RANK_BADGES[i] ?? <span className="text-pool-chalk-dim font-body text-sm">{i + 1}</span>}
                     </span>
                     {style && (
-                      <PlayerBall number={style.number} color={style.color} size={44} />
+                      <PlayerAvatar username={player.username as PlayerUsername} size={44} />
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="font-heading text-xl tracking-wide text-pool-chalk">

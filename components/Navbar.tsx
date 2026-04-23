@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import { getStoredPlayer, clearStoredPlayer } from './PlayerGate'
 import PlayerBall from './PlayerBall'
+import PlayerAvatar from './PlayerAvatar'
 
 const NAV_LINKS = [
   { href: '/history', label: 'History',  icon: '📅' },
@@ -94,7 +95,7 @@ export default function Navbar() {
                 onClick={() => setMenuOpen(o => !o)}
                 className="flex items-center gap-2 bg-pool-surface border border-pool-border rounded-xl px-2.5 py-1.5 hover:border-pool-gold/40 transition-all active:scale-95"
               >
-                <PlayerBall number={style.number} color={style.color} size={22} />
+                <PlayerAvatar username={username} size={24} />
                 <span className="font-heading text-sm tracking-wide hidden xs:inline" style={{ color: style.color }}>
                   {style.label.toUpperCase()}
                 </span>
@@ -159,7 +160,7 @@ export default function Navbar() {
             {username && style ? (
               <div className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3">
-                  <PlayerBall number={style.number} color={style.color} size={32} />
+                  <PlayerAvatar username={username} size={36} />
                   <div>
                     <p className="font-heading text-lg tracking-widest" style={{ color: style.color }}>
                       {style.label.toUpperCase()}

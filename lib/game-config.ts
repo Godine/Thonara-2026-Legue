@@ -14,10 +14,11 @@ export const PLAYER_STYLES: Record<PlayerUsername, {
   dimColor: string
   number: number
   label: string
+  photo: string
 }> = {
-  adib:   { color: '#f5c518', dimColor: '#7a6209', number: 1, label: 'Adib'   },
-  ahmed:  { color: '#60a5fa', dimColor: '#1e3a5f', number: 2, label: 'Ahmed'  },
-  godine: { color: '#f87171', dimColor: '#7a2020', number: 3, label: 'Godine' },
+  adib:   { color: '#f5c518', dimColor: '#7a6209', number: 1, label: 'Adib',   photo: '/photos/adib.jpg'   },
+  ahmed:  { color: '#60a5fa', dimColor: '#1e3a5f', number: 2, label: 'Ahmed',  photo: '/photos/ahmed.jpg'  },
+  godine: { color: '#f87171', dimColor: '#7a2020', number: 3, label: 'Godine', photo: '/photos/godine.jpg' },
 }
 
 export const PLAYERS: PlayerUsername[] = ['adib', 'ahmed', 'godine']
