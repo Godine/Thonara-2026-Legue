@@ -55,6 +55,8 @@ export default function PracticePage() {
   const [p2Name, setP2Name]       = useState<PlayerUsername | null>(null)
   const [shots, setShots]         = useState<PracticeShot[]>([])
   const [flash, setFlash]         = useState<PlayerUsername | null>(null)
+  const [breaker, setBreaker]     = useState<PlayerUsername | null>(null)
+  const [breakPots, setBreakPots] = useState(0)
 
   const recordShot = (playerId: PlayerUsername, type: ShotResult) => {
     setFlash(playerId)
@@ -68,7 +70,23 @@ export default function PracticePage() {
     }])
   }
 
-  const reset = () => { setShots([]); setP1Name(null); setP2Name(null); setPhase('setup') }
+  const recordBreak = () => {
+    if (!breaker) return
+    const newShots: PracticeShot[] = breakPots === 0
+      ? [{ id: `${Date.now()}-0`, playerId: breaker, potted: false, isLucky: false, isError: false }]
+      : Array.from({ length: breakPots }, (_, i) => ({
+          id: `${Date.now()}-${i}`, playerId: breaker!,
+          potted: true, isLucky: false, isError: false,
+        }))
+    setShots(newShots)
+    setBreaker(null)
+    setBreakPots(0)
+  }
+
+  const reset = () => {
+    setShots([]); setP1Name(null); setP2Name(null)
+    setBreaker(null); setBreakPots(0); setPhase('setup')
+  }
 
   // ─── Setup ───────────────────────────────────────────────────────────────────
   if (phase === 'setup') {
@@ -144,6 +162,18 @@ export default function PracticePage() {
     const winner = p1Stats.potted > p2Stats.potted ? p1Name
                  : p2Stats.potted > p1Stats.potted ? p2Name
                  : null
+
+    const breakInfo = (() => {
+      if (shots.length === 0) return null
+      const breakerId = shots[0].playerId
+      let pots = 0
+      for (const s of shots) {
+        if (s.playerId !== breakerId) break
+        if (!s.potted) break
+        pots++
+      }
+      return { pots, breakPlayer: breakerId }
+    })()
 
     return (
       <div className="max-w-lg mx-auto px-4 py-8">
@@ -221,6 +251,20 @@ export default function PracticePage() {
           })}
         </div>
 
+        {breakInfo && (
+          <div className="bg-pool-surface border border-pool-border rounded-2xl px-4 py-3 flex items-center justify-between mb-4">
+            <div>
+              <p className="font-heading text-xs tracking-widest text-pool-chalk-dim">BREAK</p>
+              <p className="font-body text-sm text-pool-chalk mt-0.5">
+                {PLAYER_STYLES[breakInfo.breakPlayer].label} broke
+              </p>
+            </div>
+            <p className="font-heading text-3xl" style={{ color: PLAYER_STYLES[breakInfo.breakPlayer].color }}>
+              {breakInfo.pots} {breakInfo.pots === 1 ? 'pot' : 'pots'}
+            </p>
+          </div>
+        )}
+
         <p className="text-center font-body text-xs text-pool-chalk-dim mb-6">
           {shots.length} shots total · {shots.filter(s => s.potted).length} pots · not added to league stats
         </p>
@@ -297,43 +341,100 @@ export default function PracticePage() {
         <PoolTableAnimation p1={p1} p2={p2} lastShot={lastShot} isComplete={false} winnerId={null} />
       </div>
 
-      {/* Shot entry */}
+      {/* Shot entry (or break entry on first shot) */}
       <div className="px-4 flex-1 flex flex-col">
-        <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">TAP TO RECORD A SHOT</p>
-        <div className="grid grid-cols-2 gap-3 flex-1">
-          {([{ name: p1Name, style: p1Style }, { name: p2Name, style: p2Style }]).map(({ name, style }) => {
-            const isFlashing = flash === name
-            return (
-              <div key={name} className={`flex flex-col gap-2 transition-all duration-100 ${isFlashing ? 'scale-[0.97] brightness-125' : ''}`}>
-                <div className="text-center py-1">
-                  <span className="font-heading text-sm tracking-widest" style={{ color: style.color }}>
-                    {style.label.toUpperCase()}
-                  </span>
-                </div>
-                {SHOT_BUTTONS.map(btn => (
+        {shots.length === 0 ? (
+
+          /* Break recording */
+          <div className="flex-1 flex flex-col">
+            <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">WHO BROKE?</p>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              {([{ name: p1Name, style: p1Style }, { name: p2Name, style: p2Style }]).map(({ name, style }) => {
+                const selected = breaker === name
+                return (
                   <button
-                    key={btn.type}
-                    onClick={() => recordShot(name, btn.type)}
-                    className={`shot-btn w-full py-4 rounded-xl border font-heading text-lg tracking-wider flex items-center justify-center gap-2 transition-all ${btn.classes}`}
+                    key={name}
+                    onClick={() => setBreaker(selected ? null : name)}
+                    className={`py-4 rounded-2xl border-2 font-heading text-xl tracking-wider flex flex-col items-center gap-2 transition-all active:scale-95 ${
+                      selected
+                        ? 'border-pool-gold bg-pool-gold/15 text-pool-gold'
+                        : 'border-pool-border bg-pool-bg text-pool-chalk-dim hover:border-pool-chalk/30'
+                    }`}
                   >
-                    <span>{btn.icon}</span>
-                    <span>{btn.label}</span>
+                    <PlayerBall number={style.number} color={style.color} size={36} />
+                    {style.label.toUpperCase()}
                   </button>
-                ))}
+                )
+              })}
+            </div>
+
+            {breaker && (
+              <div className="bg-pool-surface border border-pool-border rounded-2xl p-4 mb-4">
+                <p className="font-body text-xs text-pool-chalk-dim mb-3 text-center">Pots on break</p>
+                <div className="flex items-center justify-center gap-8">
+                  <button
+                    onClick={() => setBreakPots(p => Math.max(0, p - 1))}
+                    className="w-11 h-11 rounded-xl border border-pool-border font-heading text-2xl text-pool-chalk-dim hover:border-pool-chalk/40 hover:text-pool-chalk transition-all active:scale-90"
+                  >−</button>
+                  <span className="font-heading text-5xl text-pool-chalk w-12 text-center tabular-nums">{breakPots}</span>
+                  <button
+                    onClick={() => setBreakPots(p => Math.min(6, p + 1))}
+                    className="w-11 h-11 rounded-xl border border-pool-border font-heading text-2xl text-pool-chalk-dim hover:border-pool-chalk/40 hover:text-pool-chalk transition-all active:scale-90"
+                  >+</button>
+                </div>
               </div>
-            )
-          })}
-        </div>
-        <div className="flex gap-3 py-4">
-          <button onClick={() => setShots(prev => prev.slice(0, -1))} disabled={shots.length === 0}
-            className="flex-1 py-3 rounded-xl border border-pool-border font-heading text-base tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all disabled:opacity-30 active:scale-95">
-            ↩ UNDO
-          </button>
-          <button onClick={() => setPhase('recap')}
-            className="flex-1 py-3 rounded-xl bg-pool-gold text-pool-bg font-heading text-base tracking-widest hover:bg-pool-gold-light transition-all active:scale-95 glow-gold">
-            END ▶
-          </button>
-        </div>
+            )}
+
+            <button
+              onClick={recordBreak}
+              disabled={!breaker}
+              className="w-full py-4 rounded-2xl bg-pool-gold text-pool-bg font-heading text-xl tracking-widest hover:bg-pool-gold-light disabled:opacity-40 transition-all active:scale-[0.98] glow-gold"
+            >
+              RECORD BREAK
+            </button>
+          </div>
+
+        ) : (
+
+          /* Regular shot buttons */
+          <>
+            <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">TAP TO RECORD A SHOT</p>
+            <div className="grid grid-cols-2 gap-3 flex-1">
+              {([{ name: p1Name, style: p1Style }, { name: p2Name, style: p2Style }]).map(({ name, style }) => {
+                const isFlashing = flash === name
+                return (
+                  <div key={name} className={`flex flex-col gap-2 transition-all duration-100 ${isFlashing ? 'scale-[0.97] brightness-125' : ''}`}>
+                    <div className="text-center py-1">
+                      <span className="font-heading text-sm tracking-widest" style={{ color: style.color }}>
+                        {style.label.toUpperCase()}
+                      </span>
+                    </div>
+                    {SHOT_BUTTONS.map(btn => (
+                      <button
+                        key={btn.type}
+                        onClick={() => recordShot(name, btn.type)}
+                        className={`shot-btn w-full py-4 rounded-xl border font-heading text-lg tracking-wider flex items-center justify-center gap-2 transition-all ${btn.classes}`}
+                      >
+                        <span>{btn.icon}</span>
+                        <span>{btn.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex gap-3 py-4">
+              <button onClick={() => setShots(prev => prev.slice(0, -1))} disabled={shots.length === 0}
+                className="flex-1 py-3 rounded-xl border border-pool-border font-heading text-base tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all disabled:opacity-30 active:scale-95">
+                ↩ UNDO
+              </button>
+              <button onClick={() => setPhase('recap')}
+                className="flex-1 py-3 rounded-xl bg-pool-gold text-pool-bg font-heading text-base tracking-widest hover:bg-pool-gold-light transition-all active:scale-95 glow-gold">
+                END ▶
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Shot log */}
