@@ -132,7 +132,7 @@ export default async function Dashboard() {
           <div className="flex items-center justify-between mb-3 px-1">
             <h3 className="font-heading text-base tracking-widest text-pool-chalk-dim">LAST SESSION</h3>
             <span className="text-xs font-body text-pool-chalk-dim">
-              {format(new Date(recent.date), 'EEE, MMM d')}
+              {format(new Date(recent.date + 'T12:00:00'), 'EEE, MMM d')}
             </span>
           </div>
           <div className="bg-pool-surface rounded-2xl overflow-hidden border border-pool-border">
