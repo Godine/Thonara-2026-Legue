@@ -108,14 +108,23 @@ export default async function Dashboard() {
         </div>
       </section>
 
-      {/* Start Session CTA */}
-      <Link
-        href="/session/new"
-        className="flex items-center justify-center gap-3 w-full bg-pool-gold hover:bg-pool-gold-light text-pool-bg font-heading text-2xl tracking-widest py-5 rounded-2xl transition-all active:scale-[0.98] glow-gold"
-      >
-        <span>⬤</span>
-        <span>START SESSION</span>
-      </Link>
+      {/* CTAs */}
+      <div className="flex flex-col gap-3">
+        <Link
+          href="/session/new"
+          className="flex items-center justify-center gap-3 w-full bg-pool-gold hover:bg-pool-gold-light text-pool-bg font-heading text-2xl tracking-widest py-5 rounded-2xl transition-all active:scale-[0.98] glow-gold"
+        >
+          <span>⬤</span>
+          <span>START SESSION</span>
+        </Link>
+        <Link
+          href="/practice"
+          className="flex items-center justify-center gap-3 w-full border border-pool-border text-pool-chalk-dim font-heading text-lg tracking-widest py-4 rounded-2xl transition-all active:scale-[0.98] hover:border-pool-chalk/30 hover:text-pool-chalk"
+        >
+          <span>🎱</span>
+          <span>PRACTICE MODE</span>
+        </Link>
+      </div>
 
       {/* Last Session */}
       {recent && (

@@ -1,0 +1,361 @@
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { PLAYER_STYLES, PLAYERS, type PlayerUsername } from '@/lib/game-config'
+import PlayerBall from '@/components/PlayerBall'
+import PoolTableAnimation from '@/components/PoolTableAnimation'
+import type { Player, Shot, ShotResult } from '@/types/database'
+
+type Phase = 'setup' | 'playing' | 'recap'
+
+interface PracticeShot {
+  id: string
+  playerId: PlayerUsername
+  potted: boolean
+  isLucky: boolean
+  isError: boolean
+}
+
+function makePlayer(username: PlayerUsername): Player {
+  const s = PLAYER_STYLES[username]
+  return { id: username, username, display_name: s.label, ball_number: s.number, color: s.color, created_at: '' }
+}
+
+function getStats(shots: PracticeShot[], playerId: PlayerUsername) {
+  const mine = shots.filter(s => s.playerId === playerId)
+  return {
+    shots:  mine.length,
+    potted: mine.filter(s => s.potted).length,
+    lucky:  mine.filter(s => s.isLucky).length,
+    errors: mine.filter(s => s.isError).length,
+  }
+}
+
+function toShot(ps: PracticeShot, index: number): Shot {
+  return {
+    id: ps.id, game_id: 'practice', player_id: ps.playerId,
+    potted: ps.potted, is_lucky: ps.isLucky, is_error: ps.isError,
+    shot_number: index + 1, created_at: '',
+  }
+}
+
+const SHOT_BUTTONS: { type: ShotResult; label: string; icon: string; classes: string }[] = [
+  { type: 'potted', label: 'POT',   icon: '●', classes: 'bg-pool-green-bright/20 border-pool-green-bright/50 text-pool-green-bright hover:bg-pool-green-bright/30 active:bg-pool-green-bright/40' },
+  { type: 'lucky',  label: 'LUCKY', icon: '★', classes: 'bg-pool-gold/15 border-pool-gold/50 text-pool-gold hover:bg-pool-gold/25 active:bg-pool-gold/35' },
+  { type: 'miss',   label: 'MISS',  icon: '✕', classes: 'bg-pool-surface border-pool-border text-pool-chalk-dim hover:bg-pool-border active:bg-pool-border' },
+  { type: 'error',  label: 'ERR',   icon: '⚠', classes: 'bg-pool-red/15 border-pool-red/40 text-pool-red hover:bg-pool-red/25 active:bg-pool-red/35' },
+]
+
+export default function PracticePage() {
+  const router = useRouter()
+  const [phase, setPhase]         = useState<Phase>('setup')
+  const [p1Name, setP1Name]       = useState<PlayerUsername | null>(null)
+  const [p2Name, setP2Name]       = useState<PlayerUsername | null>(null)
+  const [shots, setShots]         = useState<PracticeShot[]>([])
+  const [flash, setFlash]         = useState<PlayerUsername | null>(null)
+
+  const recordShot = (playerId: PlayerUsername, type: ShotResult) => {
+    setFlash(playerId)
+    setTimeout(() => setFlash(null), 350)
+    setShots(prev => [...prev, {
+      id: `${Date.now()}-${prev.length}`,
+      playerId,
+      potted:  type === 'potted' || type === 'lucky',
+      isLucky: type === 'lucky',
+      isError: type === 'error',
+    }])
+  }
+
+  const reset = () => { setShots([]); setP1Name(null); setP2Name(null); setPhase('setup') }
+
+  // ─── Setup ───────────────────────────────────────────────────────────────────
+  if (phase === 'setup') {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-8">
+        <Link href="/" className="text-pool-chalk-dim text-sm font-body hover:text-pool-gold transition-colors">
+          ← Home
+        </Link>
+        <div className="mt-4 mb-8">
+          <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-1">Stats not saved to league</p>
+          <h1 className="font-heading text-4xl tracking-wider text-pool-chalk">PRACTICE MODE</h1>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          {(['p1', 'p2'] as const).map(side => {
+            const selected    = side === 'p1' ? p1Name : p2Name
+            const other       = side === 'p1' ? p2Name : p1Name
+            const setSelected = side === 'p1' ? setP1Name : setP2Name
+            return (
+              <div key={side}>
+                <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">
+                  PLAYER {side === 'p1' ? '1' : '2'}
+                </p>
+                <div className="flex flex-col gap-2">
+                  {PLAYERS.map(username => {
+                    const s          = PLAYER_STYLES[username]
+                    const isSelected = selected === username
+                    const isDisabled = other === username
+                    return (
+                      <button
+                        key={username}
+                        onClick={() => !isDisabled && setSelected(username)}
+                        disabled={isDisabled}
+                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all active:scale-95 ${isDisabled ? 'opacity-30 cursor-not-allowed border-pool-border bg-pool-surface' : isSelected ? 'border-2' : 'border-pool-border bg-pool-surface hover:border-pool-chalk/30'}`}
+                        style={isSelected ? { borderColor: s.color, backgroundColor: s.color + '18' } : {}}
+                      >
+                        <PlayerBall number={s.number} color={s.color} size={28} />
+                        <span className="font-heading text-base tracking-wide" style={{ color: isSelected ? s.color : '#7a786f' }}>
+                          {s.label.toUpperCase()}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <button
+          onClick={() => p1Name && p2Name && setPhase('playing')}
+          disabled={!p1Name || !p2Name}
+          className="w-full py-4 rounded-xl bg-pool-gold text-pool-bg font-heading text-xl tracking-widest hover:bg-pool-gold-light disabled:opacity-30 transition-all active:scale-95 glow-gold"
+        >
+          LET'S PLAY
+        </button>
+      </div>
+    )
+  }
+
+  // both players confirmed from here on
+  if (!p1Name || !p2Name) return null
+  const p1      = makePlayer(p1Name)
+  const p2      = makePlayer(p2Name)
+  const p1Style = PLAYER_STYLES[p1Name]
+  const p2Style = PLAYER_STYLES[p2Name]
+  const p1Stats = getStats(shots, p1Name)
+  const p2Stats = getStats(shots, p2Name)
+  const lastShot = shots.length > 0 ? toShot(shots[shots.length - 1], shots.length - 1) : null
+
+  // ─── Recap ───────────────────────────────────────────────────────────────────
+  if (phase === 'recap') {
+    const winner = p1Stats.potted > p2Stats.potted ? p1Name
+                 : p2Stats.potted > p1Stats.potted ? p2Name
+                 : null
+
+    return (
+      <div className="max-w-lg mx-auto px-4 py-8">
+        <div className="mb-6 text-center">
+          <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-1">Practice session complete</p>
+          <h1 className="font-heading text-3xl tracking-wider text-pool-chalk">RECAP</h1>
+        </div>
+
+        {/* Winner / Tie banner */}
+        {winner ? (
+          <div className="text-center mb-5 py-4 rounded-2xl border"
+            style={{ borderColor: PLAYER_STYLES[winner].color + '50', backgroundColor: PLAYER_STYLES[winner].color + '12' }}>
+            <p className="font-heading text-3xl tracking-widest" style={{ color: PLAYER_STYLES[winner].color }}>
+              {PLAYER_STYLES[winner].label.toUpperCase()} WINS 🏆
+            </p>
+            <p className="font-body text-xs text-pool-chalk-dim mt-1">
+              {winner === p1Name ? p1Stats.potted : p2Stats.potted} vs {winner === p1Name ? p2Stats.potted : p1Stats.potted} pots
+            </p>
+          </div>
+        ) : (
+          <div className="text-center mb-5 py-4 rounded-2xl border border-pool-gold/40 bg-pool-gold/10">
+            <p className="font-heading text-3xl tracking-widest text-pool-gold">IT'S A TIE 🤝</p>
+            <p className="font-body text-xs text-pool-chalk-dim mt-1">{p1Stats.potted} pots each</p>
+          </div>
+        )}
+
+        {/* Stats cards */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          {([{ name: p1Name, stats: p1Stats, style: p1Style }, { name: p2Name, stats: p2Stats, style: p2Style }]).map(({ name, stats, style }) => {
+            const isWinner = winner === name
+            return (
+              <div key={name} className={`rounded-2xl border p-4 ${isWinner ? 'bg-pool-gold/10 border-pool-gold/40' : 'bg-pool-surface border-pool-border'}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <PlayerBall number={style.number} color={style.color} size={24} />
+                  <span className="font-heading text-sm tracking-wide" style={{ color: style.color }}>
+                    {style.label.toUpperCase()}
+                  </span>
+                  {isWinner && <span className="ml-auto text-sm">🏆</span>}
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-xs font-body text-pool-chalk-dim">Pots</span>
+                    <span className="font-heading text-2xl text-pool-chalk">{stats.potted}</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-body">
+                    <span className="text-pool-chalk-dim">Shots</span>
+                    <span className="text-pool-chalk">{stats.shots}</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-body">
+                    <span className="text-pool-chalk-dim">Accuracy</span>
+                    <span className="text-pool-chalk">
+                      {stats.shots > 0 ? Math.round((stats.potted / stats.shots) * 100) : 0}%
+                    </span>
+                  </div>
+                  {stats.lucky > 0 && (
+                    <div className="flex justify-between text-xs font-body">
+                      <span className="text-pool-chalk-dim">Lucky</span>
+                      <span className="text-pool-gold">★ {stats.lucky}</span>
+                    </div>
+                  )}
+                  {stats.errors > 0 && (
+                    <div className="flex justify-between text-xs font-body">
+                      <span className="text-pool-chalk-dim">Errors</span>
+                      <span className="text-pool-red">{stats.errors}</span>
+                    </div>
+                  )}
+                  {stats.shots > 0 && (
+                    <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
+                      <div className="h-full rounded-full" style={{ width: `${Math.round((stats.potted / stats.shots) * 100)}%`, backgroundColor: style.color }} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <p className="text-center font-body text-xs text-pool-chalk-dim mb-6">
+          {shots.length} shots total · {shots.filter(s => s.potted).length} pots · not added to league stats
+        </p>
+
+        <div className="flex gap-3">
+          <button onClick={reset} className="flex-1 py-4 rounded-xl border border-pool-border font-heading text-base tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all active:scale-95">
+            PLAY AGAIN
+          </button>
+          <button onClick={() => router.push('/')} className="flex-1 py-4 rounded-xl bg-pool-gold text-pool-bg font-heading text-base tracking-widest hover:bg-pool-gold-light transition-all active:scale-95 glow-gold">
+            GO HOME
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ─── Playing ─────────────────────────────────────────────────────────────────
+  return (
+    <div className="max-w-lg mx-auto flex flex-col min-h-dvh">
+      {/* Header */}
+      <div className="px-4 pt-4 pb-3">
+        <button onClick={reset} className="text-pool-chalk-dim text-sm font-body hover:text-pool-gold transition-colors text-left">
+          ← Setup
+        </button>
+        <div className="flex items-center justify-between mt-2">
+          <div>
+            <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim">Practice · Not saved</p>
+            <h1 className="font-heading text-3xl tracking-wider text-pool-chalk leading-tight">
+              <span style={{ color: p1Style.color }}>{p1Style.label.toUpperCase()}</span>
+              <span className="text-pool-chalk-dim text-xl"> vs </span>
+              <span style={{ color: p2Style.color }}>{p2Style.label.toUpperCase()}</span>
+            </h1>
+          </div>
+          <span className="text-xs font-body text-pool-chalk-dim bg-pool-surface px-3 py-1 rounded-full border border-pool-border">
+            🎱 Practice
+          </span>
+        </div>
+        <div className="mt-2 h-px bg-gradient-to-r from-pool-gold/30 to-transparent" />
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-3 px-4 mb-2">
+        {([{ name: p1Name, stats: p1Stats, style: p1Style }, { name: p2Name, stats: p2Stats, style: p2Style }]).map(({ name, stats, style }) => (
+          <div key={name} className="rounded-2xl border p-3 bg-pool-surface border-pool-border">
+            <div className="flex items-center gap-2 mb-2">
+              <PlayerBall number={style.number} color={style.color} size={28} />
+              <span className="font-heading text-base tracking-wide" style={{ color: style.color }}>
+                {style.label.toUpperCase()}
+              </span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-xs font-body text-pool-chalk-dim">Potted</span>
+              <span className="font-heading text-2xl text-pool-chalk">{stats.potted}</span>
+            </div>
+            <div className="flex justify-between text-xs font-body text-pool-chalk-dim">
+              <span>Shots: {stats.shots}</span>
+              <span>
+                {stats.errors > 0 && <span className="text-pool-red mr-2">{stats.errors} err</span>}
+                {stats.lucky > 0 && <span className="text-pool-gold">{stats.lucky} ★</span>}
+              </span>
+            </div>
+            {stats.shots > 0 && (
+              <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
+                <div className="h-full rounded-full transition-all duration-300"
+                  style={{ width: `${Math.round((stats.potted / stats.shots) * 100)}%`, backgroundColor: style.color }} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Pool table animation */}
+      <div className="px-4 mb-3">
+        <PoolTableAnimation p1={p1} p2={p2} lastShot={lastShot} isComplete={false} winnerId={null} />
+      </div>
+
+      {/* Shot entry */}
+      <div className="px-4 flex-1 flex flex-col">
+        <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">TAP TO RECORD A SHOT</p>
+        <div className="grid grid-cols-2 gap-3 flex-1">
+          {([{ name: p1Name, style: p1Style }, { name: p2Name, style: p2Style }]).map(({ name, style }) => {
+            const isFlashing = flash === name
+            return (
+              <div key={name} className={`flex flex-col gap-2 transition-all duration-100 ${isFlashing ? 'scale-[0.97] brightness-125' : ''}`}>
+                <div className="text-center py-1">
+                  <span className="font-heading text-sm tracking-widest" style={{ color: style.color }}>
+                    {style.label.toUpperCase()}
+                  </span>
+                </div>
+                {SHOT_BUTTONS.map(btn => (
+                  <button
+                    key={btn.type}
+                    onClick={() => recordShot(name, btn.type)}
+                    className={`shot-btn w-full py-4 rounded-xl border font-heading text-lg tracking-wider flex items-center justify-center gap-2 transition-all ${btn.classes}`}
+                  >
+                    <span>{btn.icon}</span>
+                    <span>{btn.label}</span>
+                  </button>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+        <div className="flex gap-3 py-4">
+          <button onClick={() => setShots(prev => prev.slice(0, -1))} disabled={shots.length === 0}
+            className="flex-1 py-3 rounded-xl border border-pool-border font-heading text-base tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all disabled:opacity-30 active:scale-95">
+            ↩ UNDO
+          </button>
+          <button onClick={() => setPhase('recap')}
+            className="flex-1 py-3 rounded-xl bg-pool-gold text-pool-bg font-heading text-base tracking-widest hover:bg-pool-gold-light transition-all active:scale-95 glow-gold">
+            END ▶
+          </button>
+        </div>
+      </div>
+
+      {/* Shot log */}
+      {shots.length > 0 && (
+        <div className="mx-4 mb-4 bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
+          <p className="font-heading text-xs tracking-widest text-pool-chalk-dim px-4 pt-3 pb-2">LAST SHOTS</p>
+          <div className="divide-y divide-pool-border">
+            {shots.slice(-5).reverse().map((shot, i) => {
+              const s = PLAYER_STYLES[shot.playerId]
+              const label = shot.isError ? '⚠ Error' : shot.isLucky ? '★ Lucky' : shot.potted ? '● Potted' : '✕ Miss'
+              const color = shot.isError ? '#ef4444' : shot.isLucky ? '#c9a227' : shot.potted ? '#22c55e' : '#7a786f'
+              return (
+                <div key={shot.id} className={`flex items-center gap-3 px-4 py-2 ${i === 0 ? 'bg-pool-border/20' : ''}`}>
+                  <span className="font-body text-xs text-pool-chalk-dim w-6">#{shots.length - i}</span>
+                  <span className="font-body text-xs" style={{ color: s.color }}>{s.label}</span>
+                  <span className="font-body text-xs ml-auto" style={{ color }}>{label}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
