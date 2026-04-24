@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { GAME_SCHEDULE, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import { getStoredPlayer } from '@/components/PlayerGate'
 import PlayerBall from '@/components/PlayerBall'
+import PoolTableAnimation from '@/components/PoolTableAnimation'
 import type { Game, Player, Shot } from '@/types/database'
 
 interface GameFull extends Game {
@@ -290,6 +291,19 @@ export default function GamePage() {
           )
         })}
       </div>
+
+      {/* Pool table animation */}
+      {!game.is_complete && (
+        <div className="px-4 mb-3">
+          <PoolTableAnimation
+            p1={p1}
+            p2={p2}
+            lastShot={shots.length > 0 ? shots[shots.length - 1] : null}
+            isComplete={game.is_complete}
+            winnerId={game.winner_id}
+          />
+        </div>
+      )}
 
       {/* Shot entry */}
       {canEdit ? (
