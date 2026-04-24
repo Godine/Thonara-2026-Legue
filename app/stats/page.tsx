@@ -34,6 +34,8 @@ interface RawShot {
   potted: boolean
   is_lucky: boolean
   is_error: boolean
+  shot_number: number
+  created_at: string
 }
 
 interface PlayerStat {
@@ -59,6 +61,12 @@ const COLORS: Record<PlayerUsername, string> = {
 
 function pct(n: number, d: number) {
   return d === 0 ? 0 : Math.round((n / d) * 100)
+}
+
+function formatTime(s: number): string {
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
 function longestStreak(games: RawGame[], playerId: string) {
@@ -92,7 +100,7 @@ export default function StatsPage() {
           `)
           .eq('is_complete', true)
           .order('created_at', { ascending: true }),
-        supabase.from('shots').select('id, game_id, player_id, potted, is_lucky, is_error'),
+        supabase.from('shots').select('id, game_id, player_id, potted, is_lucky, is_error, shot_number, created_at'),
       ])
       setGames((gamesData ?? []) as unknown as RawGame[])
       setShots((shotsData ?? []) as unknown as RawShot[])
@@ -181,6 +189,52 @@ export default function StatsPage() {
       if (shot.is_error) playerMap[username].errors++
       if (shot.is_lucky) playerMap[username].lucky++
     }
+  }
+
+  // ── Shot grouping by game ─────────────────────────────────────────────────
+
+  const shotsByGame = new Map<string, RawShot[]>()
+  for (const s of shots) {
+    if (!shotsByGame.has(s.game_id)) shotsByGame.set(s.game_id, [])
+    shotsByGame.get(s.game_id)!.push(s)
+  }
+
+  // Game durations (first shot → last shot per game, sanity-filtered)
+  const durations: number[] = []
+  for (const gameShots of Array.from(shotsByGame.values())) {
+    if (gameShots.length < 2) continue
+    const sorted = [...gameShots].sort((a, b) => a.shot_number - b.shot_number)
+    const dur = Math.floor(
+      (new Date(sorted[sorted.length - 1].created_at).getTime() - new Date(sorted[0].created_at).getTime()) / 1000
+    )
+    if (dur >= 30 && dur <= 7200) durations.push(dur)
+  }
+  const avgDuration = durations.length > 0 ? Math.floor(durations.reduce((a, b) => a + b, 0) / durations.length) : null
+  const minDuration = durations.length > 0 ? Math.min(...durations) : null
+  const maxDuration = durations.length > 0 ? Math.max(...durations) : null
+
+  // Break pots per player (first consecutive potted shots by the first shooter)
+  const breakStats: Record<PlayerUsername, { total: number; games: number; best: number }> = {
+    adib:   { total: 0, games: 0, best: 0 },
+    ahmed:  { total: 0, games: 0, best: 0 },
+    godine: { total: 0, games: 0, best: 0 },
+  }
+  for (const game of games) {
+    const gameShots = shotsByGame.get(game.id) ?? []
+    if (gameShots.length === 0) continue
+    const sorted = [...gameShots].sort((a, b) => a.shot_number - b.shot_number)
+    const breakerId = sorted[0].player_id
+    const breakerUsername = idToUsername[breakerId]
+    if (!breakerUsername || !breakStats[breakerUsername]) continue
+    let pots = 0
+    for (const s of sorted) {
+      if (s.player_id !== breakerId) break
+      if (!s.potted) break
+      pots++
+    }
+    breakStats[breakerUsername].total += pots
+    breakStats[breakerUsername].games++
+    breakStats[breakerUsername].best = Math.max(breakStats[breakerUsername].best, pots)
   }
 
   const standings = PLAYERS
@@ -340,6 +394,31 @@ export default function StatsPage() {
         </div>
       </div>
 
+      {/* Game Duration */}
+      {avgDuration != null && (
+        <div className="bg-pool-surface rounded-2xl border border-pool-border p-4">
+          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-4">GAME DURATION</p>
+          <div className="grid grid-cols-3 gap-0 divide-x divide-pool-border">
+            <div className="text-center px-2">
+              <p className="font-body text-xs text-pool-chalk-dim mb-1">Average</p>
+              <p className="font-heading text-xl text-pool-chalk tabular-nums">{formatTime(avgDuration)}</p>
+            </div>
+            <div className="text-center px-2">
+              <p className="font-body text-xs text-pool-chalk-dim mb-1">Fastest</p>
+              <p className="font-heading text-xl text-pool-green-bright tabular-nums">
+                {minDuration != null ? formatTime(minDuration) : '—'}
+              </p>
+            </div>
+            <div className="text-center px-2">
+              <p className="font-body text-xs text-pool-chalk-dim mb-1">Longest</p>
+              <p className="font-heading text-xl text-pool-gold tabular-nums">
+                {maxDuration != null ? formatTime(maxDuration) : '—'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Wins over time */}
       {timelineData.length > 1 && (
         <div className="bg-pool-surface rounded-2xl border border-pool-border p-4">
@@ -456,6 +535,41 @@ export default function StatsPage() {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Break Performance */}
+      {Object.values(breakStats).some(s => s.games > 0) && (
+        <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
+          <div className="px-4 py-3 border-b border-pool-border">
+            <p className="font-heading text-sm tracking-widest text-pool-chalk-dim">BREAK PERFORMANCE</p>
+            <p className="font-body text-xs text-pool-chalk-dim mt-0.5">Pots on the opening break</p>
+          </div>
+          <div className="p-4">
+            <div className="grid grid-cols-4 gap-2 text-xs font-body text-pool-chalk-dim mb-3 pb-2 border-b border-pool-border/50">
+              <span>Player</span>
+              <span className="text-center">Total</span>
+              <span className="text-center">Avg</span>
+              <span className="text-center">Best</span>
+            </div>
+            <div className="space-y-3">
+              {PLAYERS.map(u => {
+                const stat = breakStats[u]
+                if (stat.games === 0) return null
+                const style = PLAYER_STYLES[u]
+                return (
+                  <div key={u} className="grid grid-cols-4 gap-2 items-center">
+                    <span className="font-heading text-sm tracking-wide" style={{ color: style.color }}>{style.label}</span>
+                    <span className="text-center font-heading text-base text-pool-chalk">{stat.total}</span>
+                    <span className="text-center font-body text-sm text-pool-chalk">
+                      {(stat.total / stat.games).toFixed(1)}
+                    </span>
+                    <span className="text-center font-heading text-base text-pool-gold">{stat.best}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         </div>
       )}
 

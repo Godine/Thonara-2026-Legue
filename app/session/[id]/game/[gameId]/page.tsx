@@ -43,7 +43,6 @@ function computeOdds(
   if (!anyShots) return { p1: 50, p2: 50 }
   const p1Remaining = Math.max(1, 8 - p1.potted)
   const p2Remaining = Math.max(1, 8 - p2.potted)
-  // Blend current game with all-time prior + Laplace smoothing
   const p1Acc = (p1.potted + p1Prior.potted + 1) / (p1.shots + p1Prior.shots + 2)
   const p2Acc = (p2.potted + p2Prior.potted + 1) / (p2.shots + p2Prior.shots + 2)
   const p1Score = (1 / p1Remaining) * p1Acc
@@ -51,6 +50,12 @@ function computeOdds(
   const total = p1Score + p2Score
   const p1Pct = Math.round((p1Score / total) * 100)
   return { p1: p1Pct, p2: 100 - p1Pct }
+}
+
+function formatTime(s: number): string {
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
 type ShotType = 'potted' | 'lucky' | 'miss' | 'error'
@@ -66,16 +71,21 @@ export default function GamePage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [game, setGame] = useState<GameFull | null>(null)
-  const [shots, setShots] = useState<Shot[]>([])
-  const [loading, setLoading] = useState(true)
+  const [game, setGame]                 = useState<GameFull | null>(null)
+  const [shots, setShots]               = useState<Shot[]>([])
+  const [loading, setLoading]           = useState(true)
   const [currentUsername, setCurrentUsername] = useState<PlayerUsername | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [endGame, setEndGame] = useState<EndGameState>({ open: false, winnerId: '', blackBall: false })
-  const [flash, setFlash] = useState<{ playerId: string; type: ShotType } | null>(null)
-  const [histStats, setHistStats] = useState<Record<string, { shots: number; potted: number }>>({})
+  const [saving, setSaving]             = useState(false)
+  const [endGame, setEndGame]           = useState<EndGameState>({ open: false, winnerId: '', blackBall: false })
+  const [flash, setFlash]               = useState<{ playerId: string; type: ShotType } | null>(null)
+  const [histStats, setHistStats]       = useState<Record<string, { shots: number; potted: number }>>({})
   const [showCelebration, setShowCelebration] = useState(false)
+  const [elapsed, setElapsed]           = useState(0)
+  const [timerStarted, setTimerStarted] = useState(false)
+  const [breaker, setBreaker]           = useState<string | null>(null)
+  const [breakPots, setBreakPots]       = useState(0)
   const prevCompleteRef = useRef<boolean | undefined>(undefined)
+  const timerStartRef   = useRef<number | null>(null)
 
   const fetchGame = useCallback(async () => {
     const [{ data: gameData }, { data: shotsData }] = await Promise.all([
@@ -93,22 +103,20 @@ export default function GamePage() {
     if (gameData) setGame(gameData as GameFull)
     if (shotsData) setShots(shotsData as Shot[])
     setLoading(false)
-  }, [gameId])
+  }, [gameId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setCurrentUsername(getStoredPlayer())
     fetchGame()
-
     const channel = supabase
       .channel(`game-shots-${gameId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shots', filter: `game_id=eq.${gameId}` }, fetchGame)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` }, fetchGame)
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
-  }, [gameId, fetchGame])
+  }, [gameId, fetchGame]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch all-time historical shot accuracy for both players (once, when game loads)
+  // Fetch all-time historical shot accuracy for both players (once)
   useEffect(() => {
     if (!game) return
     supabase
@@ -126,15 +134,32 @@ export default function GamePage() {
         }
         setHistStats(acc)
       })
-  }, [game?.player1.id, game?.player2.id, gameId])
+  }, [game?.player1.id, game?.player2.id, gameId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Show win celebration when game transitions to complete (not on initial load of a finished game)
+  // Show win celebration when game transitions from in-progress to complete
   useEffect(() => {
     if (game?.is_complete && prevCompleteRef.current === false) {
       setShowCelebration(true)
     }
     prevCompleteRef.current = game?.is_complete ?? false
   }, [game?.is_complete])
+
+  // Set timer start from first shot timestamp
+  useEffect(() => {
+    if (shots.length > 0 && !timerStarted) {
+      timerStartRef.current = new Date(shots[0].created_at).getTime()
+      setTimerStarted(true)
+    }
+  }, [shots, timerStarted])
+
+  // Tick timer while game is in progress
+  useEffect(() => {
+    if (!timerStarted || game?.is_complete) return
+    const tick = () => setElapsed(Math.floor((Date.now() - timerStartRef.current!) / 1000))
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [timerStarted, game?.is_complete])
 
   const canEdit = !!currentUsername && !game?.is_complete
 
@@ -166,6 +191,33 @@ export default function GamePage() {
     setSaving(false)
   }
 
+  const recordBreak = async () => {
+    if (!breaker || saving) return
+    setSaving(true)
+    const rows = breakPots === 0
+      ? [{ game_id: gameId, player_id: breaker, potted: false, is_lucky: false, is_error: false, shot_number: 1 }]
+      : Array.from({ length: breakPots }, (_, i) => ({
+          game_id: gameId, player_id: breaker!,
+          potted: true, is_lucky: false, is_error: false, shot_number: i + 1,
+        }))
+    const now = Date.now()
+    const optimistic: Shot[] = rows.map((r, i) => ({
+      id: `temp-${now}-${i}`,
+      game_id: r.game_id,
+      player_id: r.player_id,
+      potted: r.potted,
+      is_lucky: r.is_lucky,
+      is_error: r.is_error,
+      shot_number: r.shot_number,
+      created_at: new Date().toISOString(),
+    }))
+    setShots(optimistic)
+    await supabase.from('shots').insert(rows)
+    setSaving(false)
+    setBreaker(null)
+    setBreakPots(0)
+  }
+
   const undoLastShot = async () => {
     if (!canEdit || saving || shots.length === 0) return
     const lastShot = shots[shots.length - 1]
@@ -185,7 +237,6 @@ export default function GamePage() {
     }).eq('id', gameId)
     setSaving(false)
     setEndGame(e => ({ ...e, open: false }))
-    // Navigation is handled by WinCelebration.onDismiss
   }
 
   if (loading) {
@@ -216,7 +267,28 @@ export default function GamePage() {
     histStats[p1.id] ?? { shots: 0, potted: 0 },
     histStats[p2.id] ?? { shots: 0, potted: 0 },
   )
-  const schedule = game ? GAME_SCHEDULE.find(g => g.gameNumber === game.game_number) : null
+  const schedule = GAME_SCHEDULE.find(g => g.gameNumber === game.game_number)
+
+  // Break: first consecutive potted shots by whoever shot first
+  const breakInfo = (() => {
+    if (shots.length === 0) return null
+    const sorted = [...shots].sort((a, b) => a.shot_number - b.shot_number)
+    const breakerId = sorted[0].player_id
+    let pots = 0
+    for (const s of sorted) {
+      if (s.player_id !== breakerId) break
+      if (!s.potted) break
+      pots++
+    }
+    return { pots, breakPlayer: breakerId === p1.id ? p1 : p2 }
+  })()
+
+  // Game duration: last shot timestamp minus first shot timestamp
+  const gameDuration = shots.length >= 2
+    ? Math.floor(
+        (new Date(shots[shots.length - 1].created_at).getTime() - new Date(shots[0].created_at).getTime()) / 1000
+      )
+    : null
 
   const shotButtons: { type: ShotType; label: string; icon: string; classes: string }[] = [
     { type: 'potted', label: 'POT',   icon: '●', classes: 'bg-pool-green-bright/20 border-pool-green-bright/50 text-pool-green-bright hover:bg-pool-green-bright/30 active:bg-pool-green-bright/40' },
@@ -227,6 +299,7 @@ export default function GamePage() {
 
   return (
     <div className="max-w-lg mx-auto flex flex-col min-h-dvh">
+
       {/* Header */}
       <div className="px-4 pt-4 pb-3">
         <Link href={`/session/${sessionId}`} className="text-pool-chalk-dim text-sm font-body hover:text-pool-gold transition-colors">
@@ -241,11 +314,18 @@ export default function GamePage() {
               <span style={{ color: p2Style?.color }}>{p2.display_name.toUpperCase()}</span>
             </h1>
           </div>
-          {game.is_complete && (
-            <span className="text-xs font-body text-pool-green-bright bg-pool-green-bright/10 px-3 py-1 rounded-full border border-pool-green-bright/30">
-              Complete
-            </span>
-          )}
+          <div className="text-right shrink-0">
+            {game.is_complete ? (
+              <span className="text-xs font-body text-pool-green-bright bg-pool-green-bright/10 px-3 py-1 rounded-full border border-pool-green-bright/30">
+                Complete
+              </span>
+            ) : timerStarted ? (
+              <>
+                <p className="font-heading text-2xl text-pool-chalk tabular-nums">{formatTime(elapsed)}</p>
+                <p className="font-body text-xs text-pool-chalk-dim">elapsed</p>
+              </>
+            ) : null}
+          </div>
         </div>
         {!game.is_complete && (
           <p className="text-xs font-body text-pool-chalk-dim mt-1">
@@ -259,7 +339,10 @@ export default function GamePage() {
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 gap-3 px-4 mb-2">
-        {[{ player: p1, stats: p1Stats, style: p1Style, oddsVal: odds.p1 }, { player: p2, stats: p2Stats, style: p2Style, oddsVal: odds.p2 }].map(({ player, stats, style, oddsVal }) => {
+        {[
+          { player: p1, stats: p1Stats, style: p1Style, oddsVal: odds.p1 },
+          { player: p2, stats: p2Stats, style: p2Style, oddsVal: odds.p2 },
+        ].map(({ player, stats, style, oddsVal }) => {
           const isWinner = game.winner_id === player.id
           return (
             <div key={player.id} className={`rounded-2xl border p-3 transition-all ${isWinner ? 'bg-pool-gold/10 border-pool-gold/50 glow-gold' : 'bg-pool-surface border-pool-border'}`}>
@@ -283,10 +366,10 @@ export default function GamePage() {
               </div>
               {stats.shots > 0 && (
                 <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
-                  <div className="h-full rounded-full transition-all duration-300" style={{ width: `${Math.round((stats.potted / stats.shots) * 100)}%`, backgroundColor: style?.color }} />
+                  <div className="h-full rounded-full transition-all duration-300"
+                    style={{ width: `${Math.round((stats.potted / stats.shots) * 100)}%`, backgroundColor: style?.color }} />
                 </div>
               )}
-              {/* Win odds */}
               {!game.is_complete && (p1Stats.shots + p2Stats.shots > 0 || Object.keys(histStats).length > 0) && (
                 <div className="mt-2 pt-2 border-t border-pool-border/50">
                   <div className="flex items-center justify-between">
@@ -294,7 +377,8 @@ export default function GamePage() {
                     <span className="font-heading text-base" style={{ color: style?.color }}>{oddsVal}%</span>
                   </div>
                   <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
-                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${oddsVal}%`, backgroundColor: style?.color }} />
+                    <div className="h-full rounded-full transition-all duration-500"
+                      style={{ width: `${oddsVal}%`, backgroundColor: style?.color }} />
                   </div>
                 </div>
               )}
@@ -303,7 +387,7 @@ export default function GamePage() {
         })}
       </div>
 
-      {/* Pool table animation */}
+      {/* Pool table animation — only while game is live */}
       {!game.is_complete && (
         <div className="px-4 mb-3">
           <PoolTableAnimation
@@ -316,59 +400,167 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* Shot entry */}
-      {canEdit ? (
-        <div className="px-4 flex-1 flex flex-col">
-          <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">TAP TO RECORD A SHOT</p>
-          <div className="grid grid-cols-2 gap-3 flex-1">
-            {[{ player: p1, style: p1Style }, { player: p2, style: p2Style }].map(({ player, style }) => {
-              const isFlashing = flash?.playerId === player.id
-              return (
-                <div key={player.id} className={`flex flex-col gap-2 transition-all duration-100 ${isFlashing ? 'scale-[0.97] brightness-125' : ''}`}>
-                  <div className="text-center py-1">
-                    <span className="font-heading text-sm tracking-widest" style={{ color: style?.color }}>
-                      {player.display_name.toUpperCase()}
-                    </span>
-                  </div>
-                  {shotButtons.map(btn => (
-                    <button
-                      key={btn.type}
-                      onClick={() => recordShot(player.id, btn.type)}
-                      disabled={saving}
-                      className={`shot-btn w-full py-4 rounded-xl border font-heading text-lg tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-50 ${btn.classes}`}
-                    >
-                      <span>{btn.icon}</span>
-                      <span>{btn.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )
-            })}
+      {/* ── Main content: recap | break entry | shot entry | watching ── */}
+      {game.is_complete ? (
+
+        /* ── RECAP ── */
+        <div className="px-4 flex-1 flex flex-col gap-4 pb-6">
+          <div className="bg-pool-gold/10 border border-pool-gold/40 rounded-2xl p-5 text-center">
+            <div className="text-4xl mb-2">🏆</div>
+            <p className="font-heading text-3xl tracking-widest text-pool-gold">
+              {game.winner?.display_name.toUpperCase()} WINS!
+            </p>
+            {game.loser_potted_black && (
+              <p className="font-body text-xs text-pool-chalk-dim mt-2">Opponent potted the black ball</p>
+            )}
           </div>
-          <div className="flex gap-3 py-4">
-            <button onClick={undoLastShot} disabled={saving || shots.length === 0} className="flex-1 py-3 rounded-xl border border-pool-border font-heading text-base tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all disabled:opacity-30 active:scale-95">
-              ↩ UNDO
-            </button>
-            <button onClick={() => setEndGame({ open: true, winnerId: p1.id, blackBall: false })} className="flex-1 py-3 rounded-xl bg-pool-gold text-pool-bg font-heading text-base tracking-widest hover:bg-pool-gold-light transition-all active:scale-95 glow-gold">
-              END GAME ▶
-            </button>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-pool-surface border border-pool-border rounded-2xl p-4 text-center">
+              <p className="font-body text-xs text-pool-chalk-dim mb-1">Duration</p>
+              <p className="font-heading text-2xl text-pool-chalk">
+                {gameDuration != null ? formatTime(gameDuration) : '—'}
+              </p>
+            </div>
+            <div className="bg-pool-surface border border-pool-border rounded-2xl p-4 text-center">
+              <p className="font-body text-xs text-pool-chalk-dim mb-1">Total shots</p>
+              <p className="font-heading text-2xl text-pool-chalk">{shots.length}</p>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="px-4 flex-1">
-          {game.is_complete && game.winner && (
-            <div className="text-center py-6">
-              <div className="text-4xl mb-2">🏆</div>
-              <p className="font-heading text-2xl tracking-wider text-pool-gold">{game.winner.display_name.toUpperCase()} WINS!</p>
-              {game.loser_potted_black && <p className="text-xs font-body text-pool-chalk-dim mt-2">Opponent potted the black ball</p>}
+
+          {breakInfo && (
+            <div className="bg-pool-surface border border-pool-border rounded-2xl px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="font-heading text-xs tracking-widest text-pool-chalk-dim">BREAK</p>
+                <p className="font-body text-sm text-pool-chalk mt-0.5">{breakInfo.breakPlayer.display_name} broke</p>
+              </div>
+              <p className="font-heading text-3xl" style={{ color: PLAYER_STYLES[breakInfo.breakPlayer.username as PlayerUsername]?.color }}>
+                {breakInfo.pots} {breakInfo.pots === 1 ? 'pot' : 'pots'}
+              </p>
             </div>
           )}
-          {!game.is_complete && !currentUsername && (
+
+          <Link
+            href={`/session/${sessionId}`}
+            className="flex items-center justify-center gap-2 w-full py-4 rounded-2xl border border-pool-border font-heading text-lg tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all active:scale-[0.98]"
+          >
+            ← BACK TO SESSION
+          </Link>
+        </div>
+
+      ) : canEdit ? (
+
+        /* ── SHOT ENTRY (or BREAK entry on first shot) ── */
+        <div className="px-4 flex-1 flex flex-col">
+          {shots.length === 0 ? (
+
+            /* Break recording */
+            <div className="flex-1 flex flex-col">
+              <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">WHO BROKE?</p>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {[p1, p2].map(player => {
+                  const style = PLAYER_STYLES[player.username as PlayerUsername]
+                  const selected = breaker === player.id
+                  return (
+                    <button
+                      key={player.id}
+                      onClick={() => setBreaker(selected ? null : player.id)}
+                      className={`py-4 rounded-2xl border-2 font-heading text-xl tracking-wider flex flex-col items-center gap-2 transition-all active:scale-95 ${
+                        selected
+                          ? 'border-pool-gold bg-pool-gold/15 text-pool-gold'
+                          : 'border-pool-border bg-pool-bg text-pool-chalk-dim hover:border-pool-chalk/30'
+                      }`}
+                    >
+                      {style && <PlayerBall number={style.number} color={style.color} size={36} />}
+                      {player.display_name.toUpperCase()}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {breaker && (
+                <div className="bg-pool-surface border border-pool-border rounded-2xl p-4 mb-4">
+                  <p className="font-body text-xs text-pool-chalk-dim mb-3 text-center">Pots on break</p>
+                  <div className="flex items-center justify-center gap-8">
+                    <button
+                      onClick={() => setBreakPots(p => Math.max(0, p - 1))}
+                      className="w-11 h-11 rounded-xl border border-pool-border font-heading text-2xl text-pool-chalk-dim hover:border-pool-chalk/40 hover:text-pool-chalk transition-all active:scale-90"
+                    >−</button>
+                    <span className="font-heading text-5xl text-pool-chalk w-12 text-center tabular-nums">{breakPots}</span>
+                    <button
+                      onClick={() => setBreakPots(p => Math.min(6, p + 1))}
+                      className="w-11 h-11 rounded-xl border border-pool-border font-heading text-2xl text-pool-chalk-dim hover:border-pool-chalk/40 hover:text-pool-chalk transition-all active:scale-90"
+                    >+</button>
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={recordBreak}
+                disabled={!breaker || saving}
+                className="w-full py-4 rounded-2xl bg-pool-gold text-pool-bg font-heading text-xl tracking-widest hover:bg-pool-gold-light disabled:opacity-40 transition-all active:scale-[0.98] glow-gold"
+              >
+                {saving ? 'SAVING…' : 'RECORD BREAK'}
+              </button>
+            </div>
+
+          ) : (
+
+            /* Regular shot buttons */
+            <>
+              <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">TAP TO RECORD A SHOT</p>
+              <div className="grid grid-cols-2 gap-3 flex-1">
+                {[{ player: p1, style: p1Style }, { player: p2, style: p2Style }].map(({ player, style }) => {
+                  const isFlashing = flash?.playerId === player.id
+                  return (
+                    <div key={player.id} className={`flex flex-col gap-2 transition-all duration-100 ${isFlashing ? 'scale-[0.97] brightness-125' : ''}`}>
+                      <div className="text-center py-1">
+                        <span className="font-heading text-sm tracking-widest" style={{ color: style?.color }}>
+                          {player.display_name.toUpperCase()}
+                        </span>
+                      </div>
+                      {shotButtons.map(btn => (
+                        <button
+                          key={btn.type}
+                          onClick={() => recordShot(player.id, btn.type)}
+                          disabled={saving}
+                          className={`shot-btn w-full py-4 rounded-xl border font-heading text-lg tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-50 ${btn.classes}`}
+                        >
+                          <span>{btn.icon}</span>
+                          <span>{btn.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="flex gap-3 py-4">
+                <button
+                  onClick={undoLastShot}
+                  disabled={saving || shots.length === 0}
+                  className="flex-1 py-3 rounded-xl border border-pool-border font-heading text-base tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all disabled:opacity-30 active:scale-95"
+                >
+                  ↩ UNDO
+                </button>
+                <button
+                  onClick={() => setEndGame({ open: true, winnerId: p1.id, blackBall: false })}
+                  className="flex-1 py-3 rounded-xl bg-pool-gold text-pool-bg font-heading text-base tracking-widest hover:bg-pool-gold-light transition-all active:scale-95 glow-gold"
+                >
+                  END GAME ▶
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+      ) : (
+
+        /* ── WATCHING ── */
+        <div className="px-4 flex-1">
+          {!currentUsername && (
             <div className="text-center py-8">
               <div className="text-3xl mb-3">📱</div>
-              <p className="font-body text-pool-chalk-dim text-sm">
-                Watching live — updates appear automatically
-              </p>
+              <p className="font-body text-pool-chalk-dim text-sm">Watching live — updates appear automatically</p>
             </div>
           )}
         </div>
@@ -424,7 +616,8 @@ export default function GamePage() {
               <span className="font-body text-sm">Loser potted the black ball</span>
             </button>
             <div className="flex gap-3">
-              <button onClick={() => setEndGame(e => ({ ...e, open: false }))} className="flex-1 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-wider text-pool-chalk-dim hover:text-pool-chalk transition-all">
+              <button onClick={() => setEndGame(e => ({ ...e, open: false }))}
+                className="flex-1 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-wider text-pool-chalk-dim hover:text-pool-chalk transition-all">
                 CANCEL
               </button>
               <button onClick={confirmEndGame} disabled={!endGame.winnerId || saving}
@@ -436,15 +629,12 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* Win celebration overlay */}
+      {/* Win celebration overlay — dismissing reveals the recap below */}
       {showCelebration && game.winner && (
         <WinCelebration
           winner={game.winner}
           loser={game.winner.id === p1.id ? p2 : p1}
-          onDismiss={() => {
-            setShowCelebration(false)
-            router.push(`/session/${sessionId}`)
-          }}
+          onDismiss={() => setShowCelebration(false)}
         />
       )}
     </div>
