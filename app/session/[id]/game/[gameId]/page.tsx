@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -8,6 +8,7 @@ import { GAME_SCHEDULE, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-co
 import { getStoredPlayer } from '@/components/PlayerGate'
 import PlayerBall from '@/components/PlayerBall'
 import PoolTableAnimation from '@/components/PoolTableAnimation'
+import WinCelebration from '@/components/WinCelebration'
 import type { Game, Player, Shot } from '@/types/database'
 
 interface GameFull extends Game {
@@ -73,6 +74,8 @@ export default function GamePage() {
   const [endGame, setEndGame] = useState<EndGameState>({ open: false, winnerId: '', blackBall: false })
   const [flash, setFlash] = useState<{ playerId: string; type: ShotType } | null>(null)
   const [histStats, setHistStats] = useState<Record<string, { shots: number; potted: number }>>({})
+  const [showCelebration, setShowCelebration] = useState(false)
+  const prevCompleteRef = useRef<boolean | undefined>(undefined)
 
   const fetchGame = useCallback(async () => {
     const [{ data: gameData }, { data: shotsData }] = await Promise.all([
@@ -125,6 +128,14 @@ export default function GamePage() {
       })
   }, [game?.player1.id, game?.player2.id, gameId])
 
+  // Show win celebration when game transitions to complete (not on initial load of a finished game)
+  useEffect(() => {
+    if (game?.is_complete && prevCompleteRef.current === false) {
+      setShowCelebration(true)
+    }
+    prevCompleteRef.current = game?.is_complete ?? false
+  }, [game?.is_complete])
+
   const canEdit = !!currentUsername && !game?.is_complete
 
   const recordShot = async (playerId: string, type: ShotType) => {
@@ -174,7 +185,7 @@ export default function GamePage() {
     }).eq('id', gameId)
     setSaving(false)
     setEndGame(e => ({ ...e, open: false }))
-    router.push(`/session/${sessionId}`)
+    // Navigation is handled by WinCelebration.onDismiss
   }
 
   if (loading) {
@@ -423,6 +434,18 @@ export default function GamePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Win celebration overlay */}
+      {showCelebration && game.winner && (
+        <WinCelebration
+          winner={game.winner}
+          loser={game.winner.id === p1.id ? p2 : p1}
+          onDismiss={() => {
+            setShowCelebration(false)
+            router.push(`/session/${sessionId}`)
+          }}
+        />
       )}
     </div>
   )
