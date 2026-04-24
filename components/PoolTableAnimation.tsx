@@ -74,19 +74,42 @@ export default function PoolTableAnimation({ p1, p2 }: PoolTableProps) {
         <circle cx="285" cy="138" r="8.5" fill="#050d07" />
         <circle cx="150" cy="11" r="7.5" fill="#050d07" />
         <circle cx="150" cy="139" r="7.5" fill="#050d07" />
-        {/* Cue ball */}
         <defs>
           <radialGradient id="cue-grad" cx="38%" cy="32%" r="60%">
             <stop offset="0%" stopColor="#fff" />
             <stop offset="70%" stopColor="#eee" />
             <stop offset="100%" stopColor="#bbb" />
           </radialGradient>
+          <style>{`
+            .pool-wander-p1 { animation: pool-wander-p1 7s ease-in-out infinite; }
+            .pool-wander-p2 { animation: pool-wander-p2 6.3s ease-in-out infinite; animation-delay: -2.1s; }
+            @keyframes pool-wander-p1 {
+              0%   { transform: translate(0px,   0px); }
+              20%  { transform: translate(-12px, -7px); }
+              40%  { transform: translate(9px,  -10px); }
+              60%  { transform: translate(-5px,  11px); }
+              80%  { transform: translate(13px,   4px); }
+              100% { transform: translate(0px,   0px); }
+            }
+            @keyframes pool-wander-p2 {
+              0%   { transform: translate(0px,  0px); }
+              25%  { transform: translate(11px, -9px); }
+              50%  { transform: translate(-12px, 7px); }
+              75%  { transform: translate(8px,  -5px); }
+              100% { transform: translate(0px,  0px); }
+            }
+          `}</style>
         </defs>
+        {/* Cue ball */}
         <circle cx="150" cy="75" r="7" fill="url(#cue-grad)" />
         <circle cx="147" cy="72" r="1.8" fill="#fff" opacity="0.7" />
-        {/* Figures: P1 left, P2 right */}
-        <Figure cx={60} cy={78} username={p1.username} color={c1} />
-        <Figure cx={240} cy={78} username={p2.username} color={c2} />
+        {/* Figures: P1 left, P2 right — continuous idle wander */}
+        <g className="pool-wander-p1">
+          <Figure cx={60} cy={78} username={p1.username} color={c1} />
+        </g>
+        <g className="pool-wander-p2">
+          <Figure cx={240} cy={78} username={p2.username} color={c2} />
+        </g>
       </svg>
     </div>
   )
