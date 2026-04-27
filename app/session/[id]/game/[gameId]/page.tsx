@@ -181,6 +181,9 @@ export default function GamePage() {
   const [showOddsInfo, setShowOddsInfo]   = useState(false)
   const [showTrashTalk, setShowTrashTalk] = useState(false)
   const [trashTalkLine, setTrashTalkLine] = useState('')
+  const [adminPanel, setAdminPanel]       = useState(false)
+  const [adminWinnerId, setAdminWinnerId] = useState('')
+  const [adminBlackBall, setAdminBlackBall] = useState(false)
   const [elapsed, setElapsed]           = useState(0)
   const [timerStarted, setTimerStarted] = useState(false)
   const [breaker, setBreaker]           = useState<string | null>(null)
@@ -353,6 +356,50 @@ export default function GamePage() {
     setSaving(true)
     await supabase.from('shots').delete().eq('id', lastShot.id)
     setSaving(false)
+  }
+
+  const adminChangeWinner = async () => {
+    if (!adminWinnerId || saving) return
+    setSaving(true)
+    await supabase.from('games').update({
+      winner_id: adminWinnerId,
+      loser_potted_black: adminBlackBall,
+      is_complete: true,
+    }).eq('id', gameId)
+    setSaving(false)
+    setAdminPanel(false)
+    await fetchGame()
+  }
+
+  const adminReopenGame = async () => {
+    setSaving(true)
+    await supabase.from('games').update({
+      winner_id: null,
+      is_complete: false,
+      loser_potted_black: false,
+    }).eq('id', gameId)
+    setSaving(false)
+    setAdminPanel(false)
+    await fetchGame()
+  }
+
+  const adminDeleteShot = async (shotId: string) => {
+    setShots(prev => prev.filter(s => s.id !== shotId))
+    await supabase.from('shots').delete().eq('id', shotId)
+  }
+
+  const adminResetGame = async () => {
+    setSaving(true)
+    await supabase.from('shots').delete().eq('game_id', gameId)
+    await supabase.from('games').update({
+      winner_id: null,
+      is_complete: false,
+      loser_potted_black: false,
+    }).eq('id', gameId)
+    setShots([])
+    setSaving(false)
+    setAdminPanel(false)
+    await fetchGame()
   }
 
   const confirmEndGame = async () => {
@@ -601,6 +648,19 @@ export default function GamePage() {
             </button>
           )}
 
+          {currentUsername === 'godine' && (
+            <button
+              onClick={() => {
+                setAdminWinnerId(game.winner_id ?? '')
+                setAdminBlackBall(game.loser_potted_black)
+                setAdminPanel(true)
+              }}
+              className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl border border-pool-border font-heading text-base tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all active:scale-[0.98]"
+            >
+              ✏️ EDIT GAME
+            </button>
+          )}
+
           <Link
             href={`/session/${sessionId}`}
             className="flex items-center justify-center gap-2 w-full py-4 rounded-2xl border border-pool-border font-heading text-lg tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all active:scale-[0.98]"
@@ -703,6 +763,14 @@ export default function GamePage() {
                 >
                   ↩ UNDO
                 </button>
+                {currentUsername === 'godine' && shots.length > 0 && (
+                  <button
+                    onClick={() => setAdminPanel(true)}
+                    className="px-4 py-3 rounded-xl border border-pool-border font-heading text-sm tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all active:scale-95"
+                  >
+                    ✏️
+                  </button>
+                )}
                 <button
                   onClick={() => setEndGame({ open: true, winnerId: p1.id, blackBall: false })}
                   className="flex-1 py-3 rounded-xl bg-pool-gold text-pool-bg font-heading text-base tracking-widest hover:bg-pool-gold-light transition-all active:scale-95 glow-gold"
@@ -860,6 +928,100 @@ export default function GamePage() {
           loser={game.winner.id === p1.id ? p2 : p1}
           onDismiss={() => setShowCelebration(false)}
         />
+      )}
+
+      {/* Admin panel (Godine only) */}
+      {adminPanel && (
+        <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in"
+          onClick={() => setAdminPanel(false)}>
+          <div className="w-full max-w-lg bg-pool-surface rounded-t-3xl border-t border-pool-border animate-slide-up max-h-[85vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-pool-surface px-6 pt-6 pb-3 border-b border-pool-border">
+              <div className="flex items-center justify-between">
+                <h2 className="font-heading text-2xl tracking-wider text-pool-chalk">EDIT GAME</h2>
+                <button onClick={() => setAdminPanel(false)}
+                  className="text-pool-chalk-dim hover:text-pool-chalk text-2xl leading-none px-1">×</button>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 space-y-6">
+              {/* Change winner */}
+              <div>
+                <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3">CHANGE WINNER</p>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  {[p1, p2].map(player => {
+                    const style = PLAYER_STYLES[player.username as PlayerUsername]
+                    const sel = adminWinnerId === player.id
+                    return (
+                      <button key={player.id}
+                        onClick={() => setAdminWinnerId(player.id)}
+                        className={`py-3 rounded-xl border-2 font-heading text-base tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 ${sel ? 'border-pool-gold bg-pool-gold/15 text-pool-gold' : 'border-pool-border text-pool-chalk-dim hover:border-pool-chalk/30'}`}>
+                        {style && <PlayerBall number={style.number} color={style.color} size={28} />}
+                        {player.display_name.toUpperCase()}
+                        {sel && ' 🏆'}
+                      </button>
+                    )
+                  })}
+                </div>
+                <button onClick={() => setAdminBlackBall(b => !b)}
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border mb-3 text-sm font-body transition-all ${adminBlackBall ? 'border-pool-red/50 bg-pool-red/10 text-pool-chalk' : 'border-pool-border text-pool-chalk-dim'}`}>
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${adminBlackBall ? 'bg-pool-red border-pool-red' : 'border-pool-chalk-dim'}`}>
+                    {adminBlackBall && <span className="text-[10px] text-white">✓</span>}
+                  </div>
+                  Loser potted the black ball
+                </button>
+                <button onClick={adminChangeWinner} disabled={!adminWinnerId || saving}
+                  className="w-full py-3 rounded-xl bg-pool-gold text-pool-bg font-heading text-base tracking-widest hover:bg-pool-gold-light disabled:opacity-40 transition-all active:scale-95">
+                  {saving ? 'SAVING…' : 'SAVE WINNER'}
+                </button>
+              </div>
+
+              {/* Shot log with delete */}
+              {shots.length > 0 && (
+                <div>
+                  <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3">
+                    SHOTS ({shots.length})
+                  </p>
+                  <div className="bg-pool-bg rounded-xl border border-pool-border divide-y divide-pool-border overflow-hidden">
+                    {[...shots].sort((a, b) => a.shot_number - b.shot_number).map(s => {
+                      const shooter = s.player_id === p1.id ? p1 : p2
+                      const shooterStyle = PLAYER_STYLES[shooter.username as PlayerUsername]
+                      const label = s.is_error ? 'Error' : s.is_lucky ? 'Lucky' : s.potted ? 'Potted' : 'Miss'
+                      const labelColor = s.is_error ? '#ef4444' : s.is_lucky ? '#c9a227' : s.potted ? '#22c55e' : '#7a786f'
+                      return (
+                        <div key={s.id} className="flex items-center gap-3 px-3 py-2">
+                          <span className="font-body text-xs text-pool-chalk-dim w-6 text-right shrink-0">#{s.shot_number}</span>
+                          <span className="font-body text-sm shrink-0" style={{ color: shooterStyle?.color }}>{shooter.display_name}</span>
+                          <span className="font-body text-xs flex-1" style={{ color: labelColor }}>{label}</span>
+                          <button onClick={() => adminDeleteShot(s.id)}
+                            className="text-pool-red hover:text-red-400 text-lg leading-none px-1 transition-colors">
+                            ×
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Danger zone */}
+              <div className="border border-pool-red/30 rounded-xl p-4 space-y-2">
+                <p className="font-heading text-xs tracking-widest text-pool-red mb-3">DANGER ZONE</p>
+                {game.is_complete && (
+                  <button onClick={adminReopenGame} disabled={saving}
+                    className="w-full py-3 rounded-xl border border-pool-border font-heading text-sm tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all active:scale-95 disabled:opacity-40">
+                    {saving ? 'SAVING…' : '🔓 RE-OPEN GAME (keep shots)'}
+                  </button>
+                )}
+                <button onClick={adminResetGame} disabled={saving}
+                  className="w-full py-3 rounded-xl border border-pool-red/40 bg-pool-red/10 font-heading text-sm tracking-widest text-pool-red hover:bg-pool-red/20 transition-all active:scale-95 disabled:opacity-40">
+                  {saving ? 'SAVING…' : '🗑️ RESET ALL SHOTS & RESULT'}
+                </button>
+              </div>
+            </div>
+            <div className="h-6" />
+          </div>
+        </div>
       )}
 
       {/* Trash talk overlay */}
