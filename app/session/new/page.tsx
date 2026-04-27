@@ -96,7 +96,7 @@ export default function NewSessionPage() {
       </div>
 
       {/* Date picker — prominent */}
-      <div className="bg-pool-surface rounded-2xl border border-pool-gold/20 p-5 mb-2">
+      <div className="bg-pool-surface rounded-2xl border border-pool-gold/20 p-5 mb-2 overflow-hidden">
         <label className="block text-xs font-body tracking-widest uppercase text-pool-gold mb-3">
           📅 Session date
         </label>
@@ -104,7 +104,7 @@ export default function NewSessionPage() {
           type="date"
           value={date}
           onChange={e => setDate(e.target.value)}
-          className="w-full bg-pool-bg border border-pool-border rounded-xl px-4 py-4 text-pool-chalk font-body text-lg focus:outline-none focus:border-pool-gold/50 focus:ring-1 focus:ring-pool-gold/30 transition-all"
+          className="w-full max-w-full min-w-0 bg-pool-bg border border-pool-border rounded-xl px-4 py-3 text-pool-chalk font-body text-base focus:outline-none focus:border-pool-gold/50 focus:ring-1 focus:ring-pool-gold/30 transition-all appearance-none"
         />
         <p className="text-pool-chalk-dim text-xs font-body mt-2">
           {isPastDate
