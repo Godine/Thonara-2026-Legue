@@ -34,21 +34,79 @@ function getStats(shots: Shot[], playerId: string): PlayerStats {
   }
 }
 
+// Exponential decay weighting — recent shots count more (half-life ≈ 4 shots)
+function weightedAccuracy(shots: Shot[], playerId: string, decay = 0.8): number {
+  const mine = shots.filter(s => s.player_id === playerId)
+  if (mine.length === 0) return 0
+  let wPots = 0, wTotal = 0
+  const n = mine.length
+  for (let i = 0; i < n; i++) {
+    const w = Math.pow(decay, n - 1 - i) // most recent = weight 1, older = smaller
+    wPots  += w * (mine[i].potted ? 1 : 0)
+    wTotal += w
+  }
+  return wPots / wTotal
+}
+
+// Markov chain: P(P1 wins) given ball counts and whose turn it is.
+// Solved as a 2-equation linear system per (r1, r2) cell to avoid circular recursion.
+function solveMarkov(r1: number, r2: number, a1: number, a2: number, p1Turn: boolean): number {
+  // dp[i][j] = [P(P1 wins | P1's turn), P(P1 wins | P2's turn)]
+  const dp: [number, number][][] = Array.from({ length: r1 + 1 }, () =>
+    Array.from({ length: r2 + 1 }, () => [0, 0] as [number, number])
+  )
+  // Base cases: whoever has 0 balls left has won
+  for (let j = 0; j <= r2; j++) dp[0][j] = [1, 1]  // P1 cleared → P1 wins
+  for (let i = 1; i <= r1; i++) dp[i][0] = [0, 0]  // P2 cleared → P2 wins
+
+  const denom = a1 + a2 - a1 * a2 // always > 0 when a1,a2 ∈ (0,1)
+  for (let i = 1; i <= r1; i++) {
+    for (let j = 1; j <= r2; j++) {
+      const A = dp[i - 1][j][0]  // P1 pots → r1-1, still P1's turn
+      const B = dp[i][j - 1][1]  // P2 pots → r2-1, still P2's turn
+      const p1t = (a1 * A + (1 - a1) * a2 * B) / denom
+      dp[i][j] = [p1t, a2 * B + (1 - a2) * p1t]
+    }
+  }
+  return dp[r1][r2][p1Turn ? 0 : 1]
+}
+
 function computeOdds(
-  p1: PlayerStats, p2: PlayerStats,
-  p1Prior = { shots: 0, potted: 0 },
-  p2Prior = { shots: 0, potted: 0 },
+  shots: Shot[],
+  p1Id: string, p2Id: string,
+  p1Remaining: number, p2Remaining: number,
+  p1Prior: { shots: number; potted: number },
+  p2Prior: { shots: number; potted: number },
+  h2h: { p1Wins: number; p2Wins: number },
+  isP1Turn: boolean,
 ): { p1: number; p2: number } {
-  const anyShots = p1.shots + p2.shots + p1Prior.shots + p2Prior.shots > 0
-  if (!anyShots) return { p1: 50, p2: 50 }
-  const p1Remaining = Math.max(1, 8 - p1.potted)
-  const p2Remaining = Math.max(1, 8 - p2.potted)
-  const p1Acc = (p1.potted + p1Prior.potted + 1) / (p1.shots + p1Prior.shots + 2)
-  const p2Acc = (p2.potted + p2Prior.potted + 1) / (p2.shots + p2Prior.shots + 2)
-  const p1Score = (1 / p1Remaining) * p1Acc
-  const p2Score = (1 / p2Remaining) * p2Acc
-  const total = p1Score + p2Score
-  const p1Pct = Math.round((p1Score / total) * 100)
+  const hasData = shots.length + p1Prior.shots + p2Prior.shots + h2h.p1Wins + h2h.p2Wins > 0
+  if (!hasData) return { p1: 50, p2: 50 }
+
+  // Momentum-weighted accuracy blended with career history + Laplace smoothing
+  const p1Mom = weightedAccuracy(shots, p1Id)
+  const p2Mom = weightedAccuracy(shots, p2Id)
+  const p1GameShots = shots.filter(s => s.player_id === p1Id).length
+  const p2GameShots = shots.filter(s => s.player_id === p2Id).length
+  const raw1 = p1GameShots > 0
+    ? (p1Mom * p1GameShots + p1Prior.potted + 1) / (p1GameShots + p1Prior.shots + 2)
+    : (p1Prior.potted + 1) / (p1Prior.shots + 2)
+  const raw2 = p2GameShots > 0
+    ? (p2Mom * p2GameShots + p2Prior.potted + 1) / (p2GameShots + p2Prior.shots + 2)
+    : (p2Prior.potted + 1) / (p2Prior.shots + 2)
+  const a1 = Math.max(0.05, Math.min(0.95, raw1))
+  const a2 = Math.max(0.05, Math.min(0.95, raw2))
+
+  // Markov win probability from current ball positions
+  const markovP1 = solveMarkov(p1Remaining, p2Remaining, a1, a2, isP1Turn)
+
+  // Head-to-head nudge (fades as more shots accumulate in this game)
+  const h2hTotal = h2h.p1Wins + h2h.p2Wins
+  const h2hP1 = h2hTotal > 0 ? h2h.p1Wins / h2hTotal : 0.5
+  const h2hWeight = Math.min(h2hTotal / 20, 0.25) * Math.max(0, 1 - shots.length / 30)
+
+  const final = markovP1 * (1 - h2hWeight) + h2hP1 * h2hWeight
+  const p1Pct = Math.round(final * 100)
   return { p1: p1Pct, p2: 100 - p1Pct }
 }
 
@@ -79,7 +137,9 @@ export default function GamePage() {
   const [endGame, setEndGame]           = useState<EndGameState>({ open: false, winnerId: '', blackBall: false })
   const [flash, setFlash]               = useState<{ playerId: string; type: ShotType } | null>(null)
   const [histStats, setHistStats]       = useState<Record<string, { shots: number; potted: number }>>({})
+  const [h2hStats, setH2hStats]         = useState<{ p1Wins: number; p2Wins: number }>({ p1Wins: 0, p2Wins: 0 })
   const [showCelebration, setShowCelebration] = useState(false)
+  const [showOddsInfo, setShowOddsInfo] = useState(false)
   const [elapsed, setElapsed]           = useState(0)
   const [timerStarted, setTimerStarted] = useState(false)
   const [breaker, setBreaker]           = useState<string | null>(null)
@@ -133,6 +193,33 @@ export default function GamePage() {
           if (s.potted) acc[s.player_id].potted++
         }
         setHistStats(acc)
+      })
+  }, [game?.player1.id, game?.player2.id, gameId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch head-to-head record between these two players (excluding this game)
+  useEffect(() => {
+    if (!game) return
+    const p1id = game.player1.id
+    const p2id = game.player2.id
+    supabase
+      .from('games')
+      .select('winner_id, player1_id, player2_id')
+      .in('player1_id', [p1id, p2id])
+      .in('player2_id', [p1id, p2id])
+      .eq('is_complete', true)
+      .neq('id', gameId)
+      .then(({ data }) => {
+        if (!data) return
+        let p1Wins = 0, p2Wins = 0
+        for (const g of data as { winner_id: string; player1_id: string; player2_id: string }[]) {
+          // Only count direct matchups between these two
+          const isMatchup = (g.player1_id === p1id && g.player2_id === p2id)
+            || (g.player1_id === p2id && g.player2_id === p1id)
+          if (!isMatchup) continue
+          if (g.winner_id === p1id) p1Wins++
+          else if (g.winner_id === p2id) p2Wins++
+        }
+        setH2hStats({ p1Wins, p2Wins })
       })
   }, [game?.player1.id, game?.player2.id, gameId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -262,10 +349,20 @@ export default function GamePage() {
   const p2Style = PLAYER_STYLES[p2.username as PlayerUsername]
   const p1Stats = getStats(shots, p1.id)
   const p2Stats = getStats(shots, p2.id)
+
+  // Whose turn: pot keeps the shooter's turn, miss/error switches it
+  const isP1Turn = shots.length === 0
+    ? true
+    : (shots[shots.length - 1].player_id === p1.id) === shots[shots.length - 1].potted
+
   const odds = computeOdds(
-    p1Stats, p2Stats,
+    shots, p1.id, p2.id,
+    Math.max(1, 8 - p1Stats.potted),
+    Math.max(1, 8 - p2Stats.potted),
     histStats[p1.id] ?? { shots: 0, potted: 0 },
     histStats[p2.id] ?? { shots: 0, potted: 0 },
+    h2hStats,
+    isP1Turn,
   )
   const schedule = GAME_SCHEDULE.find(g => g.gameNumber === game.game_number)
 
@@ -373,7 +470,14 @@ export default function GamePage() {
               {!game.is_complete && (p1Stats.shots + p2Stats.shots > 0 || Object.keys(histStats).length > 0) && (
                 <div className="mt-2 pt-2 border-t border-pool-border/50">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-body text-pool-chalk-dim">Win chance</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-body text-pool-chalk-dim">Win chance</span>
+                      <button
+                        onClick={() => setShowOddsInfo(true)}
+                        className="text-pool-chalk-dim/40 hover:text-pool-chalk-dim transition-colors leading-none text-xs"
+                        aria-label="How odds are calculated"
+                      >ⓘ</button>
+                    </div>
                     <span className="font-heading text-base" style={{ color: style?.color }}>{oddsVal}%</span>
                   </div>
                   <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
@@ -625,6 +729,69 @@ export default function GamePage() {
                 {saving ? 'SAVING…' : 'CONFIRM'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Odds info modal */}
+      {showOddsInfo && (
+        <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in"
+          onClick={() => setShowOddsInfo(false)}>
+          <div className="w-full max-w-lg bg-pool-surface rounded-t-3xl border-t border-pool-border p-6 animate-slide-up"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-heading text-2xl tracking-wider text-pool-chalk">HOW ODDS WORK</h2>
+              <button onClick={() => setShowOddsInfo(false)}
+                className="text-pool-chalk-dim hover:text-pool-chalk transition-colors text-2xl leading-none px-1">×</button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-pool-bg rounded-xl p-4 border border-pool-border">
+                <p className="font-heading text-sm tracking-widest text-pool-gold mb-1">TURN SIMULATION</p>
+                <p className="font-body text-sm text-pool-chalk-dim leading-relaxed">
+                  The model simulates the game turn by turn — pot a ball and you keep shooting,
+                  miss and the table flips. From the current position (balls left, whose shot it is)
+                  it calculates the <span className="text-pool-chalk">exact mathematical probability</span> of winning.
+                </p>
+              </div>
+
+              <div className="bg-pool-bg rounded-xl p-4 border border-pool-border">
+                <p className="font-heading text-sm tracking-widest text-pool-gold mb-1">ACCURACY SCORE</p>
+                <p className="font-body text-sm text-pool-chalk-dim leading-relaxed">
+                  Your pot rate blends two signals:
+                </p>
+                <ul className="mt-2 space-y-1">
+                  <li className="font-body text-sm text-pool-chalk-dim flex gap-2">
+                    <span className="text-pool-gold shrink-0">→</span>
+                    <span><span className="text-pool-chalk">This game</span> — recent shots count more than early ones (momentum)</span>
+                  </li>
+                  <li className="font-body text-sm text-pool-chalk-dim flex gap-2">
+                    <span className="text-pool-gold shrink-0">→</span>
+                    <span><span className="text-pool-chalk">Career history</span> — your all-time pot rate, so odds make sense from shot one</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="bg-pool-bg rounded-xl p-4 border border-pool-border">
+                <p className="font-heading text-sm tracking-widest text-pool-gold mb-1">HEAD-TO-HEAD NUDGE</p>
+                <p className="font-body text-sm text-pool-chalk-dim leading-relaxed">
+                  Your historical win rate against <span className="text-pool-chalk">this specific opponent</span> adds
+                  a small adjustment (up to 25%, tapering off as more shots are taken in this game).
+                </p>
+                {(h2hStats.p1Wins + h2hStats.p2Wins) > 0 && (
+                  <p className="font-body text-xs text-pool-chalk-dim mt-2 pt-2 border-t border-pool-border/50">
+                    This matchup: <span style={{ color: p1Style?.color }}>{p1.display_name}</span> {h2hStats.p1Wins}
+                    {' – '}
+                    {h2hStats.p2Wins} <span style={{ color: p2Style?.color }}>{p2.display_name}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <button onClick={() => setShowOddsInfo(false)}
+              className="w-full mt-5 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-widest text-pool-chalk-dim hover:text-pool-chalk transition-all">
+              GOT IT
+            </button>
           </div>
         </div>
       )}
