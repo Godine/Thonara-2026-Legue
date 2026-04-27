@@ -241,6 +241,67 @@ export default function StatsPage() {
     .map(u => playerMap[u])
     .sort((a, b) => b.wins - a.wins || b.gamesPlayed - a.gamesPlayed)
 
+  // ── Session order ─────────────────────────────────────────────────────────
+  const sessionOrder: string[] = []
+  const seenSessions = new Set<string>()
+  for (const g of games) {
+    if (!seenSessions.has(g.session_id)) {
+      seenSessions.add(g.session_id)
+      sessionOrder.push(g.session_id)
+    }
+  }
+
+  // ── Elo ratings + session-by-session trend ────────────────────────────────
+  const eloAtSession: { label: string; adib: number; ahmed: number; godine: number }[] = []
+  const runElo: Record<PlayerUsername, number> = { adib: 1200, ahmed: 1200, godine: 1200 }
+  for (const sid of sessionOrder) {
+    for (const g of games.filter(g2 => g2.session_id === sid && !!g2.winner_id)) {
+      const wu = idToUsername[g.winner_id!]
+      const lu = (g.player1.username === wu ? g.player2.username : g.player1.username) as PlayerUsername
+      if (!wu || !(wu in runElo) || !(lu in runElo)) continue
+      const delta = Math.round(32 * (1 - 1 / (1 + Math.pow(10, (runElo[lu] - runElo[wu]) / 400))))
+      runElo[wu] += delta
+      runElo[lu] -= delta
+    }
+    const sess = games.find(g => g.session_id === sid)?.session
+    eloAtSession.push({
+      label: sess ? format(parseISO(sess.date), 'd MMM') : sid.slice(0, 4),
+      adib: runElo.adib, ahmed: runElo.ahmed, godine: runElo.godine,
+    })
+  }
+  const eloRatings: Record<PlayerUsername, number> = { ...runElo }
+
+  // ── Current win streaks ───────────────────────────────────────────────────
+  const currentStreaks: Record<PlayerUsername, number> = { adib: 0, ahmed: 0, godine: 0 }
+  const longestStreaks: Record<PlayerUsername, number> = { adib: 0, ahmed: 0, godine: 0 }
+  for (const u of PLAYERS) {
+    const pid = playerIdMap[u]
+    if (!pid) continue
+    const myGames = games.filter(g => g.player1_id === pid || g.player2_id === pid)
+    for (let i = myGames.length - 1; i >= 0; i--) {
+      if (myGames[i].winner_id === pid) currentStreaks[u]++
+      else break
+    }
+    longestStreaks[u] = longestStreak(myGames, pid)
+  }
+
+  // ── Per-game records ─────────────────────────────────────────────────────
+  const recordAccuracy: Record<PlayerUsername, number> = { adib: 0, ahmed: 0, godine: 0 }
+  const recordPots: Record<PlayerUsername, number>     = { adib: 0, ahmed: 0, godine: 0 }
+  for (const game of games) {
+    const gameShots = shotsByGame.get(game.id) ?? []
+    for (const u of PLAYERS) {
+      const pid = playerIdMap[u]
+      if (!pid) continue
+      const mine = gameShots.filter(s => s.player_id === pid)
+      recordPots[u] = Math.max(recordPots[u], mine.filter(s => s.potted).length)
+      if (mine.length >= 5) {
+        const acc = Math.round((mine.filter(s => s.potted).length / mine.length) * 100)
+        recordAccuracy[u] = Math.max(recordAccuracy[u], acc)
+      }
+    }
+  }
+
   // ── Head-to-head ─────────────────────────────────────────────────────────
 
   const h2h: Record<string, Record<string, number>> = {}
@@ -250,17 +311,6 @@ export default function StatsPage() {
     const wu = idToUsername[g.winner_id]
     const opp = wu === g.player1.username ? g.player2.username : g.player1.username
     if (wu && opp) h2h[wu][opp] = (h2h[wu][opp] ?? 0) + 1
-  }
-
-  // ── Cumulative wins timeline ──────────────────────────────────────────────
-
-  const sessionOrder: string[] = []
-  const seenSessions = new Set<string>()
-  for (const g of games) {
-    if (!seenSessions.has(g.session_id)) {
-      seenSessions.add(g.session_id)
-      sessionOrder.push(g.session_id)
-    }
   }
 
   const cumWins: Record<PlayerUsername, number> = { adib: 0, ahmed: 0, godine: 0 }
@@ -387,12 +437,54 @@ export default function StatsPage() {
                   <p className="font-body text-xs text-pool-chalk-dim">
                     {p.losses}L · {pct(p.wins, p.gamesPlayed)}%
                   </p>
+                  <p className="font-body text-xs mt-0.5">
+                    <span style={{ color: style.color }}>{eloRatings[p.username]}</span>
+                    <span className="text-pool-chalk-dim"> ELO</span>
+                  </p>
                 </div>
               </div>
             )
           })}
         </div>
       </div>
+
+      {/* Elo Ratings */}
+      {eloAtSession.length > 0 && (
+        <div className="bg-pool-surface rounded-2xl border border-pool-border p-4">
+          <div className="flex items-start justify-between mb-1">
+            <p className="font-heading text-sm tracking-widest text-pool-chalk-dim">ELO RATINGS</p>
+            <span className="text-pool-chalk-dim text-xs font-body">K=32 · starts 1200</span>
+          </div>
+          <div className="flex gap-4 mb-4">
+            {PLAYERS.map(u => (
+              <div key={u} className="flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[u] }} />
+                <span className="font-heading text-base" style={{ color: COLORS[u] }}>{eloRatings[u]}</span>
+                <span className="font-body text-xs text-pool-chalk-dim">{PLAYER_STYLES[u].label}</span>
+              </div>
+            ))}
+          </div>
+          {eloAtSession.length > 1 ? (
+            <ResponsiveContainer width="100%" height={150}>
+              <LineChart data={eloAtSession} margin={{ top: 4, right: 4, bottom: 0, left: -10 }}>
+                <XAxis dataKey="label" tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
+                <Tooltip
+                  contentStyle={{ background: '#1a2018', border: '1px solid #2e3a2b', borderRadius: 8, fontFamily: 'Inter', fontSize: 12 }}
+                  labelStyle={{ color: '#c8c4b5', marginBottom: 4 }}
+                  itemStyle={{ color: '#c8c4b5' }}
+                />
+                {PLAYERS.map(u => (
+                  <Line key={u} type="monotone" dataKey={u} name={PLAYER_STYLES[u].label}
+                    stroke={COLORS[u]} strokeWidth={2.5} dot={{ r: 3, fill: COLORS[u] }} activeDot={{ r: 5 }} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="font-body text-xs text-pool-chalk-dim text-center py-2">Play more sessions to see the trend</p>
+          )}
+        </div>
+      )}
 
       {/* Game Duration */}
       {avgDuration != null && (
@@ -621,6 +713,59 @@ export default function StatsPage() {
             ))}
           </BarChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Streaks & Records */}
+      <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
+        <div className="px-4 py-3 border-b border-pool-border">
+          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim">STREAKS &amp; RECORDS</p>
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-4 gap-2 text-xs font-body text-pool-chalk-dim mb-3 pb-2 border-b border-pool-border/50">
+            <span></span>
+            <span className="text-center">Current W</span>
+            <span className="text-center">Best Run</span>
+            <span className="text-center">Record Acc</span>
+          </div>
+          <div className="space-y-3">
+            {standings.map(p => {
+              const style = PLAYER_STYLES[p.username]
+              return (
+                <div key={p.username} className="grid grid-cols-4 gap-2 items-center">
+                  <span className="font-heading text-sm tracking-wide" style={{ color: style.color }}>{style.label}</span>
+                  <div className="text-center">
+                    {currentStreaks[p.username] > 0 ? (
+                      <span className="font-heading text-base text-pool-gold">🔥{currentStreaks[p.username]}</span>
+                    ) : (
+                      <span className="font-body text-sm text-pool-chalk-dim">—</span>
+                    )}
+                  </div>
+                  <span className="text-center font-heading text-base text-pool-chalk">{longestStreaks[p.username]}</span>
+                  <span className="text-center font-body text-sm text-pool-chalk">
+                    {recordAccuracy[p.username] > 0 ? `${recordAccuracy[p.username]}%` : '—'}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-4 pt-3 border-t border-pool-border/50">
+            <div className="grid grid-cols-4 gap-2 text-xs font-body text-pool-chalk-dim mb-3 pb-2 border-b border-pool-border/50">
+              <span></span>
+              <span className="text-center col-span-2">Most Pots (game)</span>
+              <span className="text-center">Best Break</span>
+            </div>
+            {standings.map(p => {
+              const style = PLAYER_STYLES[p.username]
+              return (
+                <div key={p.username} className="grid grid-cols-4 gap-2 items-center mb-3 last:mb-0">
+                  <span className="font-heading text-sm tracking-wide" style={{ color: style.color }}>{style.label}</span>
+                  <span className="text-center col-span-2 font-heading text-base text-pool-chalk">{recordPots[p.username]}</span>
+                  <span className="text-center font-heading text-base text-pool-gold">{breakStats[p.username].best}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Fun facts */}

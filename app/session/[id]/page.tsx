@@ -366,11 +366,64 @@ export default function SessionPage() {
         })}
       </div>
 
-      {completedGames.length === totalGames && totalGames > 0 && (
-        <p className="text-center text-pool-gold font-heading text-xl tracking-wider mt-5">
-          ALL GAMES COMPLETE 🎱
-        </p>
-      )}
+      {completedGames.length === totalGames && totalGames > 0 && (() => {
+        // Aggregate shot stats across all games for each player
+        const allShots = completedGames.flatMap(g => g.shots)
+        const sessionStats = uniquePlayers.map(player => {
+          if (!player) return null
+          const st = computeStats(allShots, player.id)
+          const acc = st.shots > 0 ? Math.round((st.potted / st.shots) * 100) : 0
+          return { player, wins: sessionWins[player.id] ?? 0, acc, potted: st.potted, shots: st.shots }
+        }).filter(Boolean) as { player: Player; wins: number; acc: number; potted: number; shots: number }[]
+
+        // MVP = most wins; tie-break by accuracy
+        const sorted = [...sessionStats].sort((a, b) => b.wins - a.wins || b.acc - a.acc)
+        const mvp = sorted[0]
+        const spoon = sorted[sorted.length - 1]
+        const mvpStyle = PLAYER_STYLES[mvp.player.username as PlayerUsername]
+        const spoonStyle = PLAYER_STYLES[spoon.player.username as PlayerUsername]
+
+        return (
+          <div className="mt-5 space-y-3">
+            <p className="text-center text-pool-gold font-heading text-xl tracking-wider">ALL GAMES COMPLETE 🎱</p>
+
+            {/* MVP */}
+            <div
+              className="rounded-2xl border-2 p-4 flex items-center gap-4"
+              style={{ borderColor: mvpStyle?.color, background: `${mvpStyle?.color}11` }}
+            >
+              <div className="text-4xl">🏆</div>
+              <div className="flex-1">
+                <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-0.5">Session MVP</p>
+                <p className="font-heading text-2xl tracking-wide" style={{ color: mvpStyle?.color }}>
+                  {mvp.player.display_name.toUpperCase()}
+                </p>
+                <p className="font-body text-xs text-pool-chalk-dim mt-0.5">
+                  {mvp.wins} wins · {mvp.potted} pots · {mvp.acc}% acc
+                </p>
+              </div>
+              {mvpStyle && <PlayerBall number={mvpStyle.number} color={mvpStyle.color} size={44} />}
+            </div>
+
+            {/* Wooden spoon */}
+            {spoon.player.id !== mvp.player.id && (
+              <div className="rounded-2xl border border-pool-border p-4 flex items-center gap-4 opacity-75">
+                <div className="text-4xl">🥄</div>
+                <div className="flex-1">
+                  <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-0.5">Wooden Spoon</p>
+                  <p className="font-heading text-xl tracking-wide text-pool-chalk-dim">
+                    {spoon.player.display_name.toUpperCase()}
+                  </p>
+                  <p className="font-body text-xs text-pool-chalk-dim mt-0.5">
+                    {spoon.wins} wins · {spoon.potted} pots · {spoon.acc}% acc
+                  </p>
+                </div>
+                {spoonStyle && <PlayerBall number={spoonStyle.number} color={spoonStyle.color} size={36} />}
+              </div>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }

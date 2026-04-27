@@ -34,6 +34,45 @@ function getStats(shots: Shot[], playerId: string): PlayerStats {
   }
 }
 
+function pickTrashTalk(
+  winner: Player, loser: Player,
+  wStats: PlayerStats, lStats: PlayerStats,
+  shots: Shot[], loserPottedBlack: boolean
+): string {
+  const lines: string[] = []
+  const wAcc  = wStats.shots > 0 ? Math.round((wStats.potted / wStats.shots) * 100) : 0
+  const lAcc  = lStats.shots > 0 ? Math.round((lStats.potted / lStats.shots) * 100) : 0
+  const wName = winner.display_name
+  const lName = loser.display_name
+
+  if (loserPottedBlack)
+    lines.push(`${lName} literally handed ${wName} the win. Gifted. Wrapped. With a bow. 🎁`)
+  if (lStats.errors >= 3)
+    lines.push(`${lStats.errors} errors from ${lName}. The table wasn't the problem. 🫠`)
+  if (lStats.lucky >= 2)
+    lines.push(`${lStats.lucky} flukes from ${lName} and still lost? That's impressive in the wrong way. 🍀😬`)
+  if (wStats.lucky >= 2 && wAcc < 50)
+    lines.push(`${wName} shot ${wAcc}% but won. Pure luck wrapped in a victory dance. 💃`)
+  if (wAcc >= 70 && wStats.shots >= 5)
+    lines.push(`${wAcc}% accuracy from ${wName}. Clinical. Cold-blooded. No mercy. 🎯`)
+  if (lAcc < 30 && lStats.shots >= 5)
+    lines.push(`${lAcc}% accuracy, ${lName}? The pockets were right there. Just saying. 👀`)
+  if (wStats.shots > 0 && lStats.shots > 0 && wStats.shots < lStats.shots * 0.6)
+    lines.push(`${wName} needed ${wStats.shots} shots. ${lName} needed ${lStats.shots}. Let that sink in. ⏱️`)
+  if (lStats.potted === 0 && lStats.shots >= 3)
+    lines.push(`${lStats.shots} shots. Zero pots. ${lName}, the table called — it wants a break. 😭`)
+
+  if (lines.length === 0) {
+    const fallbacks = [
+      `${wName} wins again. ${lName} will have their revenge… eventually. 🔮`,
+      `Another day, another L for ${lName}. At least they showed up. 🫡`,
+      `${wName} took it home tonight. Clean, easy, inevitable. 👑`,
+    ]
+    return fallbacks[Math.floor(Math.random() * fallbacks.length)]
+  }
+  return lines[Math.floor(Math.random() * lines.length)]
+}
+
 // Exponential decay weighting — recent shots count more (half-life ≈ 4 shots)
 function weightedAccuracy(shots: Shot[], playerId: string, decay = 0.8): number {
   const mine = shots.filter(s => s.player_id === playerId)
@@ -139,7 +178,9 @@ export default function GamePage() {
   const [histStats, setHistStats]       = useState<Record<string, { shots: number; potted: number }>>({})
   const [h2hStats, setH2hStats]         = useState<{ p1Wins: number; p2Wins: number }>({ p1Wins: 0, p2Wins: 0 })
   const [showCelebration, setShowCelebration] = useState(false)
-  const [showOddsInfo, setShowOddsInfo] = useState(false)
+  const [showOddsInfo, setShowOddsInfo]   = useState(false)
+  const [showTrashTalk, setShowTrashTalk] = useState(false)
+  const [trashTalkLine, setTrashTalkLine] = useState('')
   const [elapsed, setElapsed]           = useState(0)
   const [timerStarted, setTimerStarted] = useState(false)
   const [breaker, setBreaker]           = useState<string | null>(null)
@@ -544,6 +585,22 @@ export default function GamePage() {
             </div>
           )}
 
+          {game.winner && (
+            <button
+              onClick={() => {
+                const wStats = getStats(shots, game.winner_id!)
+                const lId = game.player1_id === game.winner_id ? game.player2_id : game.player1_id
+                const loser = game.player1_id === game.winner_id ? game.player2 : game.player1
+                const lStats = getStats(shots, lId)
+                setTrashTalkLine(pickTrashTalk(game.winner!, loser, wStats, lStats, shots, game.loser_potted_black))
+                setShowTrashTalk(true)
+              }}
+              className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl border border-pool-gold/40 bg-pool-gold/10 font-heading text-base tracking-widest text-pool-gold hover:bg-pool-gold/20 transition-all active:scale-[0.98]"
+            >
+              📢 TRASH TALK CARD
+            </button>
+          )}
+
           <Link
             href={`/session/${sessionId}`}
             className="flex items-center justify-center gap-2 w-full py-4 rounded-2xl border border-pool-border font-heading text-lg tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all active:scale-[0.98]"
@@ -803,6 +860,53 @@ export default function GamePage() {
           loser={game.winner.id === p1.id ? p2 : p1}
           onDismiss={() => setShowCelebration(false)}
         />
+      )}
+
+      {/* Trash talk overlay */}
+      {showTrashTalk && game?.winner && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-pool-bg/90 backdrop-blur-sm animate-fade-in"
+          onClick={() => setShowTrashTalk(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl border-2 p-6 flex flex-col items-center gap-5 text-center"
+            style={{
+              borderColor: PLAYER_STYLES[game.winner.username as PlayerUsername]?.color ?? '#c9a227',
+              background: 'linear-gradient(160deg, #0e1e12 0%, #060d08 100%)',
+              boxShadow: `0 0 40px ${PLAYER_STYLES[game.winner.username as PlayerUsername]?.color ?? '#c9a227'}55`,
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <p className="font-body text-xs tracking-[0.25em] uppercase text-pool-chalk-dim">Thonara 2026 · Game Recap</p>
+            <div className="text-5xl">📢</div>
+            <p className="font-heading text-xl tracking-wide text-pool-chalk leading-snug">{trashTalkLine}</p>
+            <div className="w-full grid grid-cols-2 gap-3 pt-2 border-t border-pool-border">
+              {[game.player1, game.player2].map(pl => {
+                const st = getStats(shots, pl.id)
+                const acc = st.shots > 0 ? Math.round((st.potted / st.shots) * 100) : 0
+                const plStyle = PLAYER_STYLES[pl.username as PlayerUsername]
+                const isWinner = pl.id === game.winner_id
+                return (
+                  <div key={pl.id} className="text-center">
+                    <p className="font-heading text-sm tracking-widest mb-1" style={{ color: plStyle?.color }}>
+                      {pl.display_name.toUpperCase()}{isWinner ? ' 👑' : ''}
+                    </p>
+                    <p className="font-heading text-3xl text-pool-chalk">{st.potted}</p>
+                    <p className="font-body text-xs text-pool-chalk-dim">pots · {acc}%</p>
+                    {st.errors > 0 && <p className="font-body text-xs text-pool-red mt-0.5">{st.errors} errors</p>}
+                    {st.lucky > 0 && <p className="font-body text-xs text-pool-gold mt-0.5">{st.lucky} flukes</p>}
+                  </div>
+                )
+              })}
+            </div>
+            <button
+              onClick={() => setShowTrashTalk(false)}
+              className="font-body text-xs text-pool-chalk-dim hover:text-pool-chalk transition-colors"
+            >
+              tap anywhere to close
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
