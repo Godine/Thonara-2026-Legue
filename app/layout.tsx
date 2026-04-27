@@ -19,7 +19,7 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   title: 'Thonara League',
-  description: 'Pool league tracker — Adib, Ahmed & Godine',
+  description: 'Pool league tracker — Adib, Ahmed & Amine',
   appleWebApp: {
     capable: true,
     title: 'Thonara League',

@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Thonara League',
     short_name: 'Thonara',
-    description: 'Pool league tracker — Adib, Ahmed & Godine',
+    description: 'Pool league tracker — Adib, Ahmed & Amine',
     start_url: '/',
     display: 'standalone',
     orientation: 'portrait',
