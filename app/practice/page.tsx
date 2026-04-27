@@ -41,6 +41,54 @@ function toShot(ps: PracticeShot, index: number): Shot {
   }
 }
 
+function practiceWeightedAcc(shots: PracticeShot[], playerId: PlayerUsername, decay = 0.8): number {
+  const mine = shots.filter(s => s.playerId === playerId)
+  if (mine.length === 0) return 0
+  let wPots = 0, wTotal = 0
+  const n = mine.length
+  for (let i = 0; i < n; i++) {
+    const w = Math.pow(decay, n - 1 - i)
+    wPots  += w * (mine[i].potted ? 1 : 0)
+    wTotal += w
+  }
+  return wPots / wTotal
+}
+
+function solveMarkov(r1: number, r2: number, a1: number, a2: number, p1Turn: boolean): number {
+  const dp: [number, number][][] = Array.from({ length: r1 + 1 }, () =>
+    Array.from({ length: r2 + 1 }, () => [0, 0] as [number, number])
+  )
+  for (let j = 0; j <= r2; j++) dp[0][j] = [1, 1]
+  for (let i = 1; i <= r1; i++) dp[i][0] = [0, 0]
+  const denom = a1 + a2 - a1 * a2
+  for (let i = 1; i <= r1; i++) {
+    for (let j = 1; j <= r2; j++) {
+      const A = dp[i - 1][j][0]
+      const B = dp[i][j - 1][1]
+      const p1t = (a1 * A + (1 - a1) * a2 * B) / denom
+      dp[i][j] = [p1t, a2 * B + (1 - a2) * p1t]
+    }
+  }
+  return dp[r1][r2][p1Turn ? 0 : 1]
+}
+
+function computePracticeOdds(
+  shots: PracticeShot[],
+  p1Id: PlayerUsername, p2Id: PlayerUsername,
+  p1Remaining: number, p2Remaining: number,
+  isP1Turn: boolean,
+): { p1: number; p2: number } {
+  if (shots.length === 0) return { p1: 50, p2: 50 }
+  const p1Mom = practiceWeightedAcc(shots, p1Id)
+  const p2Mom = practiceWeightedAcc(shots, p2Id)
+  const p1n = shots.filter(s => s.playerId === p1Id).length
+  const p2n = shots.filter(s => s.playerId === p2Id).length
+  const a1 = Math.max(0.05, Math.min(0.95, p1n > 0 ? (p1Mom * p1n + 1) / (p1n + 2) : 0.5))
+  const a2 = Math.max(0.05, Math.min(0.95, p2n > 0 ? (p2Mom * p2n + 1) / (p2n + 2) : 0.5))
+  const p1Pct = Math.round(solveMarkov(p1Remaining, p2Remaining, a1, a2, isP1Turn) * 100)
+  return { p1: p1Pct, p2: 100 - p1Pct }
+}
+
 const SHOT_BUTTONS: { type: ShotResult; label: string; icon: string; classes: string }[] = [
   { type: 'potted', label: 'POT',   icon: '●', classes: 'bg-pool-green-bright/20 border-pool-green-bright/50 text-pool-green-bright hover:bg-pool-green-bright/30 active:bg-pool-green-bright/40' },
   { type: 'lucky',  label: 'LUCKY', icon: '★', classes: 'bg-pool-gold/15 border-pool-gold/50 text-pool-gold hover:bg-pool-gold/25 active:bg-pool-gold/35' },
@@ -57,6 +105,7 @@ export default function PracticePage() {
   const [flash, setFlash]         = useState<PlayerUsername | null>(null)
   const [breaker, setBreaker]     = useState<PlayerUsername | null>(null)
   const [breakPots, setBreakPots] = useState(0)
+  const [showOddsInfo, setShowOddsInfo] = useState(false)
 
   const recordShot = (playerId: PlayerUsername, type: ShotResult) => {
     setFlash(playerId)
@@ -156,6 +205,17 @@ export default function PracticePage() {
   const p1Stats = getStats(shots, p1Name)
   const p2Stats = getStats(shots, p2Name)
   const lastShot = shots.length > 0 ? toShot(shots[shots.length - 1], shots.length - 1) : null
+
+  const isP1Turn = shots.length === 0
+    ? true
+    : (shots[shots.length - 1].playerId === p1Name) === shots[shots.length - 1].potted
+
+  const odds = computePracticeOdds(
+    shots, p1Name, p2Name,
+    Math.max(1, 8 - p1Stats.potted),
+    Math.max(1, 8 - p2Stats.potted),
+    isP1Turn,
+  )
 
   // ─── Recap ───────────────────────────────────────────────────────────────────
   if (phase === 'recap') {
@@ -307,7 +367,10 @@ export default function PracticePage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 px-4 mb-2">
-        {([{ name: p1Name, stats: p1Stats, style: p1Style }, { name: p2Name, stats: p2Stats, style: p2Style }]).map(({ name, stats, style }) => (
+        {([
+          { name: p1Name, stats: p1Stats, style: p1Style, oddsVal: odds.p1 },
+          { name: p2Name, stats: p2Stats, style: p2Style, oddsVal: odds.p2 },
+        ]).map(({ name, stats, style, oddsVal }) => (
           <div key={name} className="rounded-2xl border p-3 bg-pool-surface border-pool-border">
             <div className="flex items-center gap-2 mb-2">
               <PlayerBall number={style.number} color={style.color} size={28} />
@@ -330,6 +393,25 @@ export default function PracticePage() {
               <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
                 <div className="h-full rounded-full transition-all duration-300"
                   style={{ width: `${Math.round((stats.potted / stats.shots) * 100)}%`, backgroundColor: style.color }} />
+              </div>
+            )}
+            {shots.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-pool-border/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-body text-pool-chalk-dim">Win chance</span>
+                    <button
+                      onClick={() => setShowOddsInfo(true)}
+                      className="text-pool-chalk-dim/40 hover:text-pool-chalk-dim transition-colors leading-none text-xs"
+                      aria-label="How odds are calculated"
+                    >ⓘ</button>
+                  </div>
+                  <span className="font-heading text-base" style={{ color: style.color }}>{oddsVal}%</span>
+                </div>
+                <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
+                  <div className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${oddsVal}%`, backgroundColor: style.color }} />
+                </div>
               </div>
             )}
           </div>
@@ -454,6 +536,43 @@ export default function PracticePage() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Odds info modal */}
+      {showOddsInfo && (
+        <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in"
+          onClick={() => setShowOddsInfo(false)}>
+          <div className="w-full max-w-lg bg-pool-surface rounded-t-3xl border-t border-pool-border p-6 animate-slide-up"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-heading text-2xl tracking-wider text-pool-chalk">HOW ODDS WORK</h2>
+              <button onClick={() => setShowOddsInfo(false)}
+                className="text-pool-chalk-dim hover:text-pool-chalk transition-colors text-2xl leading-none px-1">×</button>
+            </div>
+            <div className="space-y-4">
+              <div className="bg-pool-bg rounded-xl p-4 border border-pool-border">
+                <p className="font-heading text-sm tracking-widest text-pool-gold mb-1">TURN SIMULATION</p>
+                <p className="font-body text-sm text-pool-chalk-dim leading-relaxed">
+                  Simulates the game turn by turn — pot and you keep shooting, miss and the table flips.
+                  From balls left and whose shot it is, the model calculates the <span className="text-pool-chalk">exact mathematical probability</span> of winning.
+                </p>
+              </div>
+              <div className="bg-pool-bg rounded-xl p-4 border border-pool-border">
+                <p className="font-heading text-sm tracking-widest text-pool-gold mb-1">ACCURACY SCORE</p>
+                <p className="font-body text-sm text-pool-chalk-dim leading-relaxed">
+                  Based on shots in this session only — <span className="text-pool-chalk">recent shots count more</span> than earlier ones, so a hot streak moves the needle straight away.
+                </p>
+              </div>
+              <p className="font-body text-xs text-pool-chalk-dim text-center">
+                Practice odds use this session only · no league history involved
+              </p>
+            </div>
+            <button onClick={() => setShowOddsInfo(false)}
+              className="w-full mt-5 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-widest text-pool-chalk-dim hover:text-pool-chalk transition-all">
+              GOT IT
+            </button>
           </div>
         </div>
       )}
