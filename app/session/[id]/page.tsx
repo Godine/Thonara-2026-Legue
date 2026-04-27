@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
@@ -38,12 +38,15 @@ function computeStats(shots: Shot[], playerId: string) {
 
 export default function SessionPage() {
   const { id } = useParams<{ id: string }>()
+  const router = useRouter()
   const supabase = createClient()
 
   const [session, setSession] = useState<FullSession | null>(null)
   const [loading, setLoading] = useState(true)
   const [quick, setQuick] = useState<QuickResult | null>(null)
   const [quickSaving, setQuickSaving] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const fetchSession = useCallback(async () => {
     const { data } = await supabase
@@ -94,6 +97,17 @@ export default function SessionPage() {
     setQuickSaving(false)
   }
 
+  const deleteSession = async () => {
+    setDeleting(true)
+    const gameIds = session?.games.map(g => g.id) ?? []
+    if (gameIds.length > 0) {
+      await supabase.from('shots').delete().in('game_id', gameIds)
+      await supabase.from('games').delete().eq('session_id', id)
+    }
+    await supabase.from('sessions').delete().eq('id', id)
+    router.push('/')
+  }
+
   const clearResult = async (gameId: string) => {
     await supabase.from('games').update({
       winner_id: null,
@@ -135,7 +149,15 @@ export default function SessionPage() {
     <div className="max-w-lg mx-auto px-4 py-6 animate-fade-in">
       {/* Header */}
       <div className="mb-5">
-        <Link href="/" className="text-pool-chalk-dim text-sm font-body hover:text-pool-gold transition-colors">← Home</Link>
+        <div className="flex items-center justify-between">
+          <Link href="/" className="text-pool-chalk-dim text-sm font-body hover:text-pool-gold transition-colors">← Home</Link>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="text-xs font-body text-pool-chalk-dim hover:text-pool-red transition-colors px-2 py-1"
+          >
+            🗑️ Delete
+          </button>
+        </div>
         <div className="mt-3 flex items-end justify-between">
           <div>
             <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim">Session</p>
@@ -424,6 +446,40 @@ export default function SessionPage() {
           </div>
         )
       })()}
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in"
+          onClick={() => setShowDeleteConfirm(false)}>
+          <div className="w-full max-w-lg bg-pool-surface rounded-t-3xl border-t border-pool-border p-6 animate-slide-up"
+            onClick={e => e.stopPropagation()}>
+            <div className="text-center mb-5">
+              <div className="text-4xl mb-3">🗑️</div>
+              <h2 className="font-heading text-2xl tracking-wider text-pool-chalk mb-1">DELETE SESSION</h2>
+              <p className="font-body text-sm text-pool-chalk-dim">
+                {format(new Date(session.date + 'T12:00:00'), 'MMMM d, yyyy')} · {totalGames} games · {session.games.flatMap(g => g.shots).length} shots
+              </p>
+              <p className="font-body text-xs text-pool-red mt-2">This cannot be undone.</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="flex-1 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-widest text-pool-chalk-dim hover:text-pool-chalk transition-all"
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={deleteSession}
+                disabled={deleting}
+                className="flex-1 py-4 rounded-xl bg-pool-red border border-pool-red font-heading text-lg tracking-widest text-white hover:opacity-90 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {deleting ? 'DELETING…' : 'DELETE'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
