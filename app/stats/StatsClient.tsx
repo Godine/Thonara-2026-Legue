@@ -279,7 +279,7 @@ export default function StatsClient({ games, shots }: { games: RawGame[]; shots:
   const overallAcc = pct(totalPotted, totalShots)
 
   const bestStreak = PLAYERS.reduce((acc, u) => {
-    const streak = longestStreak(games, Object.keys(idToUsername).find(k => idToUsername[k] === u) ?? '')
+    const streak = longestStreaks[u]
     return streak > acc.streak ? { username: u, streak } : acc
   }, { username: 'adib' as PlayerUsername, streak: 0 })
 
