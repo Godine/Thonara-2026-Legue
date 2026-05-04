@@ -1,13 +1,13 @@
 'use client'
 
-import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { PLAYER_STYLES, PLAYERS, type PlayerUsername } from '@/lib/game-config'
 import PlayerBall from '@/components/PlayerBall'
+import PlayerAvatar from '@/components/PlayerAvatar'
 import { pct, formatTime, longestStreak } from '@/lib/stats'
 import {
   BarChart, Bar, LineChart, Line,
-  XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts'
 
 interface RawGame {
@@ -54,9 +54,8 @@ const COLORS: Record<PlayerUsername, string> = {
   godine: '#f87171',
 }
 
-
 export default function StatsClient({ games, shots }: { games: RawGame[]; shots: RawShot[] }) {
-  // ── Compute player stats ─────────────────────────────────────────────────
+  // ── Compute player stats ────────────────────────────────────────────────
 
   const playerMap: Record<string, PlayerStat> = {}
   for (const username of PLAYERS) {
@@ -115,7 +114,7 @@ export default function StatsClient({ games, shots }: { games: RawGame[]; shots:
     }
   }
 
-  // ── Shot grouping by game ─────────────────────────────────────────────────
+  // ── Shot grouping by game ───────────────────────────────────────────────
 
   const shotsByGame = new Map<string, RawShot[]>()
   for (const s of shots) {
@@ -163,7 +162,7 @@ export default function StatsClient({ games, shots }: { games: RawGame[]; shots:
     .map(u => playerMap[u])
     .sort((a, b) => b.wins - a.wins || b.gamesPlayed - a.gamesPlayed)
 
-  // ── Session order ─────────────────────────────────────────────────────────
+  // ── Session order ───────────────────────────────────────────────────────
   const sessionOrder: string[] = []
   const seenSessions = new Set<string>()
   for (const g of games) {
@@ -173,7 +172,7 @@ export default function StatsClient({ games, shots }: { games: RawGame[]; shots:
     }
   }
 
-  // ── Elo ratings ───────────────────────────────────────────────────────────
+  // ── Elo ratings ─────────────────────────────────────────────────────────
   const eloAtSession: { label: string; adib: number; ahmed: number; godine: number }[] = []
   const runElo: Record<PlayerUsername, number> = { adib: 1200, ahmed: 1200, godine: 1200 }
   for (const sid of sessionOrder) {
@@ -193,7 +192,7 @@ export default function StatsClient({ games, shots }: { games: RawGame[]; shots:
   }
   const eloRatings: Record<PlayerUsername, number> = { ...runElo }
 
-  // ── Streaks ───────────────────────────────────────────────────────────────
+  // ── Streaks ─────────────────────────────────────────────────────────────
   const currentStreaks: Record<PlayerUsername, number> = { adib: 0, ahmed: 0, godine: 0 }
   const longestStreaks: Record<PlayerUsername, number> = { adib: 0, ahmed: 0, godine: 0 }
   for (const u of PLAYERS) {
@@ -207,7 +206,7 @@ export default function StatsClient({ games, shots }: { games: RawGame[]; shots:
     longestStreaks[u] = longestStreak(myGames, pid)
   }
 
-  // ── Per-game records ──────────────────────────────────────────────────────
+  // ── Per-game records ────────────────────────────────────────────────────
   const recordAccuracy: Record<PlayerUsername, number> = { adib: 0, ahmed: 0, godine: 0 }
   const recordPots: Record<PlayerUsername, number>     = { adib: 0, ahmed: 0, godine: 0 }
   for (const game of games) {
@@ -224,7 +223,7 @@ export default function StatsClient({ games, shots }: { games: RawGame[]; shots:
     }
   }
 
-  // ── H2H ──────────────────────────────────────────────────────────────────
+  // ── H2H ─────────────────────────────────────────────────────────────────
   const h2h: Record<string, Record<string, number>> = {}
   for (const u of PLAYERS) { h2h[u] = {}; for (const v of PLAYERS) h2h[u][v] = 0 }
   for (const g of games) {
@@ -234,7 +233,7 @@ export default function StatsClient({ games, shots }: { games: RawGame[]; shots:
     if (wu && opp) h2h[wu][opp] = (h2h[wu][opp] ?? 0) + 1
   }
 
-  // ── Chart data ────────────────────────────────────────────────────────────
+  // ── Chart data ───────────────────────────────────────────────────────────
   const cumWins: Record<PlayerUsername, number> = { adib: 0, ahmed: 0, godine: 0 }
   const timelineData = sessionOrder.map(sid => {
     for (const g of games.filter(g => g.session_id === sid && g.winner_id)) {
@@ -263,20 +262,6 @@ export default function StatsClient({ games, shots }: { games: RawGame[]; shots:
     return entry
   })
 
-  const accuracyData = PLAYERS.map(u => ({
-    name: PLAYER_STYLES[u].label,
-    'Pot %': pct(playerMap[u].potted, playerMap[u].shots),
-    color: COLORS[u],
-  }))
-
-  const efficiencyData = PLAYERS.map(u => ({
-    name: PLAYER_STYLES[u].label,
-    'Pots/game': playerMap[u].gamesPlayed > 0
-      ? parseFloat((playerMap[u].potted / playerMap[u].gamesPlayed).toFixed(1))
-      : 0,
-    color: COLORS[u],
-  }))
-
   const byGameNum: Record<number, Record<string, number>> = {}
   for (let n = 1; n <= 6; n++) byGameNum[n] = { adib: 0, ahmed: 0, godine: 0 }
   for (const g of games) {
@@ -298,324 +283,384 @@ export default function StatsClient({ games, shots }: { games: RawGame[]; shots:
     return streak > acc.streak ? { username: u, streak } : acc
   }, { username: 'adib' as PlayerUsername, streak: 0 })
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Pre-compute record holders ───────────────────────────────────────────
+  const bestAccPlayer   = PLAYERS.reduce((b, u) => recordAccuracy[u] > recordAccuracy[b] ? u : b, PLAYERS[0])
+  const mostPotsPlayer  = PLAYERS.reduce((b, u) => recordPots[u] > recordPots[b] ? u : b, PLAYERS[0])
+  const mostBlackPlayer = PLAYERS.reduce((b, u) => playerMap[u].blackBallIncidents > playerMap[b].blackBallIncidents ? u : b, PLAYERS[0])
+
+  // Podium order: 2nd left · 1st centre · 3rd right
+  const podium     = [standings[1], standings[0], standings[2]].filter(Boolean)
+  const podiumRank = [2, 1, 3] as const
+
+  const chartTooltipStyle = {
+    contentStyle: { background: '#1a2018', border: '1px solid #2e3a2b', borderRadius: 8, fontFamily: 'Inter', fontSize: 12 },
+    labelStyle:   { color: '#c8c4b5', marginBottom: 4 },
+    itemStyle:    { color: '#c8c4b5' },
+  }
+  const chartAxisProps = { fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }
+
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-lg mx-auto px-4 py-6 animate-fade-in space-y-5">
-      <div>
-        <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-1">2026 Season</p>
-        <h1 className="font-heading text-4xl tracking-wider text-pool-chalk">STATS</h1>
-        <div className="mt-2 h-px bg-gradient-to-r from-pool-gold/40 to-transparent" />
+    <div className="max-w-lg mx-auto pb-16 animate-fade-in">
+
+      {/* ── PAGE HEADER ─────────────────────────────────────────────── */}
+      <div className="px-4 pt-6 pb-4">
+        <p className="font-body text-xs tracking-[0.25em] uppercase text-pool-chalk-dim">2026 Season</p>
+        <div className="flex items-baseline justify-between mt-0.5">
+          <h1 className="font-heading text-5xl tracking-wider text-pool-chalk">STATS</h1>
+          <p className="font-body text-sm text-pool-chalk-dim">{games.length} games · {sessionOrder.length} sessions</p>
+        </div>
+        <div className="mt-3 h-px bg-gradient-to-r from-pool-gold/40 to-transparent" />
       </div>
 
-      {/* Standings */}
-      <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
-        <div className="px-4 py-3 border-b border-pool-border">
-          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim">STANDINGS</p>
-        </div>
-        <div className="divide-y divide-pool-border">
-          {standings.map((p, i) => {
+      {/* ── PODIUM ──────────────────────────────────────────────────── */}
+      <section className="px-4 pt-4 pb-2">
+        <div className="flex items-end gap-2">
+          {podium.map((p, i) => {
+            const rank = podiumRank[i]
             const style = PLAYER_STYLES[p.username]
+            const podiumH   = rank === 1 ? 72 : rank === 2 ? 52 : 38
+            const rankColor = rank === 1 ? '#c9a227' : rank === 2 ? '#8a8a8a' : '#8b5c2a'
+            const avatarSz  = rank === 1 ? 60 : 48
             return (
-              <div key={p.username} className="flex items-center gap-3 px-4 py-3">
-                <span className="font-heading text-lg text-pool-chalk-dim w-5">{i + 1}</span>
-                <PlayerBall number={style.number} color={style.color} size={30} />
-                <div className="flex-1">
-                  <p className="font-heading text-base tracking-wide" style={{ color: style.color }}>
-                    {p.displayName.toUpperCase()}
-                  </p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="font-body text-xs text-pool-chalk-dim">{p.gamesPlayed} played</span>
-                    {(form[p.username] ?? []).length > 0 && (
-                      <>
-                        <span className="text-pool-chalk-dim text-xs">·</span>
-                        {(form[p.username] ?? []).map((win, j) => (
-                          <span key={j} style={{ color: win ? style.color : '#3a3a35', fontSize: 10, lineHeight: 1 }}>●</span>
-                        ))}
-                      </>
-                    )}
-                  </div>
+              <div key={p.username} className="flex flex-col items-center flex-1">
+                <span className="text-2xl mb-1">{rank === 1 ? '👑' : rank === 2 ? '🥈' : '🥉'}</span>
+                <div style={{ filter: `drop-shadow(0 0 10px ${style.color}55)` }}>
+                  <PlayerAvatar username={p.username} size={avatarSz} />
                 </div>
-                <div className="text-right">
-                  <p className="font-heading text-2xl text-pool-gold">{p.wins}</p>
-                  <p className="font-body text-xs text-pool-chalk-dim">{p.losses}L · {pct(p.wins, p.gamesPlayed)}%</p>
-                  <p className="font-body text-xs mt-0.5">
-                    <span style={{ color: style.color }}>{eloRatings[p.username]}</span>
-                    <span className="text-pool-chalk-dim"> ELO</span>
-                  </p>
+                <p className="font-heading text-xs tracking-widest mt-2" style={{ color: style.color }}>
+                  {style.label.toUpperCase()}
+                </p>
+                <p className={`font-heading ${rank === 1 ? 'text-4xl' : 'text-3xl'} text-pool-chalk leading-none mt-0.5`}>
+                  {p.wins}
+                </p>
+                <p className="font-body text-xs text-pool-chalk-dim">wins</p>
+                <p className="font-body text-xs mt-0.5" style={{ color: style.color }}>
+                  {eloRatings[p.username]} ELO
+                </p>
+                {currentStreaks[p.username] > 0 && (
+                  <p className="font-heading text-xs text-pool-gold mt-0.5">🔥 {currentStreaks[p.username]}</p>
+                )}
+                <div
+                  className="w-full mt-3 rounded-t-xl flex items-center justify-center"
+                  style={{
+                    height: podiumH,
+                    background: `linear-gradient(180deg, ${rankColor}22 0%, ${rankColor}08 100%)`,
+                    borderTop:   `2px solid ${rankColor}66`,
+                    borderLeft:  `1px solid ${rankColor}22`,
+                    borderRight: `1px solid ${rankColor}22`,
+                  }}
+                >
+                  <span className="font-heading text-2xl" style={{ color: `${rankColor}55` }}>{rank}</span>
                 </div>
               </div>
             )
           })}
         </div>
-      </div>
+      </section>
 
-      {/* Elo trend */}
-      {eloAtSession.length > 0 && (
-        <div className="bg-pool-surface rounded-2xl border border-pool-border p-4">
-          <div className="flex items-start justify-between mb-1">
-            <p className="font-heading text-sm tracking-widest text-pool-chalk-dim">ELO RATINGS</p>
-            <span className="text-pool-chalk-dim text-xs font-body">K=32 · starts 1200</span>
-          </div>
-          <div className="flex gap-4 mb-4">
-            {PLAYERS.map(u => (
-              <div key={u} className="flex items-center gap-1.5">
-                <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[u] }} />
-                <span className="font-heading text-base" style={{ color: COLORS[u] }}>{eloRatings[u]}</span>
-                <span className="font-body text-xs text-pool-chalk-dim">{PLAYER_STYLES[u].label}</span>
-              </div>
-            ))}
-          </div>
-          {eloAtSession.length > 1 ? (
-            <ResponsiveContainer width="100%" height={150}>
-              <LineChart data={eloAtSession} margin={{ top: 4, right: 4, bottom: 0, left: -10 }}>
-                <XAxis dataKey="label" tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
-                <Tooltip contentStyle={{ background: '#1a2018', border: '1px solid #2e3a2b', borderRadius: 8, fontFamily: 'Inter', fontSize: 12 }} labelStyle={{ color: '#c8c4b5', marginBottom: 4 }} itemStyle={{ color: '#c8c4b5' }} />
-                {PLAYERS.map(u => (
-                  <Line key={u} type="monotone" dataKey={u} name={PLAYER_STYLES[u].label} stroke={COLORS[u]} strokeWidth={2.5} dot={{ r: 3, fill: COLORS[u] }} activeDot={{ r: 5 }} />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="font-body text-xs text-pool-chalk-dim text-center py-2">Play more sessions to see the trend</p>
-          )}
-        </div>
-      )}
-
-      {/* Game Duration */}
-      {avgDuration != null && (
-        <div className="bg-pool-surface rounded-2xl border border-pool-border p-4">
-          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-4">GAME DURATION</p>
-          <div className="grid grid-cols-3 gap-0 divide-x divide-pool-border">
-            <div className="text-center px-2">
-              <p className="font-body text-xs text-pool-chalk-dim mb-1">Average</p>
-              <p className="font-heading text-xl text-pool-chalk tabular-nums">{formatTime(avgDuration)}</p>
+      {/* ── QUICK STATS ─────────────────────────────────────────────── */}
+      <section className="px-4 py-4">
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: 'Games',    value: games.length.toString(),     icon: '🎱' },
+            { label: 'Accuracy', value: `${overallAcc}%`,            icon: '🎯' },
+            { label: 'Shots',    value: totalShots.toLocaleString(), icon: '📊' },
+          ].map(({ label, value, icon }) => (
+            <div key={label} className="bg-pool-surface rounded-xl border border-pool-border p-3 text-center">
+              <p className="text-xl mb-1">{icon}</p>
+              <p className="font-heading text-xl text-pool-chalk">{value}</p>
+              <p className="font-body text-xs text-pool-chalk-dim">{label}</p>
             </div>
-            <div className="text-center px-2">
-              <p className="font-body text-xs text-pool-chalk-dim mb-1">Fastest</p>
-              <p className="font-heading text-xl text-pool-green-bright tabular-nums">{minDuration != null ? formatTime(minDuration) : '—'}</p>
-            </div>
-            <div className="text-center px-2">
-              <p className="font-body text-xs text-pool-chalk-dim mb-1">Longest</p>
-              <p className="font-heading text-xl text-pool-gold tabular-nums">{maxDuration != null ? formatTime(maxDuration) : '—'}</p>
-            </div>
-          </div>
+          ))}
         </div>
-      )}
+      </section>
 
-      {/* Points Race */}
-      {timelineData.length > 1 && (
-        <div className="bg-pool-surface rounded-2xl border border-pool-border p-4">
-          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-4">POINTS RACE</p>
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={timelineData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-              <XAxis dataKey="label" tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip contentStyle={{ background: '#1a2018', border: '1px solid #2e3a2b', borderRadius: 8, fontFamily: 'Inter', fontSize: 12 }} labelStyle={{ color: '#c8c4b5', marginBottom: 4 }} itemStyle={{ color: '#c8c4b5' }} />
-              {PLAYERS.map(u => (
-                <Line key={u} type="monotone" dataKey={u} name={PLAYER_STYLES[u].label} stroke={COLORS[u]} strokeWidth={2.5} dot={{ r: 3, fill: COLORS[u] }} activeDot={{ r: 5 }} />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Accuracy over time */}
-      {accuracyTrend.length > 1 && totalShots > 0 && (
-        <div className="bg-pool-surface rounded-2xl border border-pool-border p-4">
-          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-4">ACCURACY OVER TIME</p>
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={accuracyTrend} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-              <XAxis dataKey="label" tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} unit="%" domain={[0, 100]} />
-              <Tooltip contentStyle={{ background: '#1a2018', border: '1px solid #2e3a2b', borderRadius: 8, fontFamily: 'Inter', fontSize: 12 }} labelStyle={{ color: '#c8c4b5', marginBottom: 4 }} itemStyle={{ color: '#c8c4b5' }} formatter={(v: number) => [`${v}%`]} />
-              {PLAYERS.map(u => (
-                <Line key={u} type="monotone" dataKey={u} name={PLAYER_STYLES[u].label} stroke={COLORS[u]} strokeWidth={2.5} dot={{ r: 3, fill: COLORS[u] }} activeDot={{ r: 5 }} connectNulls />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Shot accuracy */}
+      {/* ── ACCURACY SHOWDOWN ───────────────────────────────────────── */}
       {totalShots > 0 && (
-        <div className="bg-pool-surface rounded-2xl border border-pool-border p-4">
-          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-4">SHOT ACCURACY</p>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={accuracyData} margin={{ top: 0, right: 4, bottom: 0, left: -20 }}>
-              <XAxis dataKey="name" tick={{ fill: '#7a786f', fontSize: 11, fontFamily: 'Inter' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} unit="%" />
-              <Tooltip contentStyle={{ background: '#1a2018', border: '1px solid #2e3a2b', borderRadius: 8, fontFamily: 'Inter', fontSize: 12 }} itemStyle={{ color: '#c8c4b5' }} formatter={(v: number) => [`${v}%`]} />
-              <Bar dataKey="Pot %" radius={[4,4,0,0]}>
-                {accuracyData.map(d => <Cell key={d.name} fill={d.color} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-pool-border">
-            {PLAYERS.map(u => {
-              const p = playerMap[u]
-              const style = PLAYER_STYLES[u]
-              return (
-                <div key={u} className="text-center">
-                  <p className="font-heading text-xs tracking-widest mb-2" style={{ color: style.color }}>{style.label.toUpperCase()}</p>
-                  <div className="space-y-1 text-xs font-body">
-                    <div className="flex justify-between"><span className="text-pool-chalk-dim">Pot</span><span className="text-pool-chalk">{pct(p.potted, p.shots)}%</span></div>
-                    <div className="flex justify-between"><span className="text-pool-chalk-dim">Error</span><span className="text-pool-red">{pct(p.errors, p.shots)}%</span></div>
-                    <div className="flex justify-between"><span className="text-pool-chalk-dim">Lucky</span><span className="text-pool-gold">{pct(p.lucky, p.shots)}%</span></div>
-                    <div className="flex justify-between pt-1 border-t border-pool-border/50"><span className="text-pool-chalk-dim">Total</span><span className="text-pool-chalk">{p.shots}</span></div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Shot efficiency */}
-      {totalShots > 0 && (
-        <div className="bg-pool-surface rounded-2xl border border-pool-border p-4">
-          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-1">SHOT EFFICIENCY</p>
-          <p className="font-body text-xs text-pool-chalk-dim mb-4">Average pots per game</p>
-          <ResponsiveContainer width="100%" height={110}>
-            <BarChart layout="vertical" data={efficiencyData} margin={{ top: 0, right: 24, bottom: 0, left: 10 }}>
-              <XAxis type="number" tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" tick={{ fill: '#7a786f', fontSize: 11, fontFamily: 'Inter' }} axisLine={false} tickLine={false} width={48} />
-              <Tooltip contentStyle={{ background: '#1a2018', border: '1px solid #2e3a2b', borderRadius: 8, fontFamily: 'Inter', fontSize: 12 }} itemStyle={{ color: '#c8c4b5' }} formatter={(v: number) => [`${v} pots/game`]} />
-              <Bar dataKey="Pots/game" radius={[0, 4, 4, 0]}>
-                {efficiencyData.map(d => <Cell key={d.name} fill={d.color} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Break Performance */}
-      {Object.values(breakStats).some(s => s.games > 0) && (
-        <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
-          <div className="px-4 py-3 border-b border-pool-border">
-            <p className="font-heading text-sm tracking-widest text-pool-chalk-dim">BREAK PERFORMANCE</p>
-            <p className="font-body text-xs text-pool-chalk-dim mt-0.5">Pots on the opening break</p>
-          </div>
-          <div className="p-4">
-            <div className="grid grid-cols-4 gap-2 text-xs font-body text-pool-chalk-dim mb-3 pb-2 border-b border-pool-border/50">
-              <span>Player</span><span className="text-center">Total</span><span className="text-center">Avg</span><span className="text-center">Best</span>
-            </div>
-            <div className="space-y-3">
-              {PLAYERS.map(u => {
-                const stat = breakStats[u]
-                if (stat.games === 0) return null
+        <section className="px-4 py-2">
+          <SectionHeader title="ACCURACY SHOWDOWN" />
+          <div className="bg-pool-surface rounded-2xl border border-pool-border p-4 mt-3 space-y-5">
+            {[...PLAYERS]
+              .sort((a, b) => pct(playerMap[b].potted, playerMap[b].shots) - pct(playerMap[a].potted, playerMap[a].shots))
+              .map((u, i) => {
+                const p     = playerMap[u]
                 const style = PLAYER_STYLES[u]
+                const acc   = pct(p.potted, p.shots)
                 return (
-                  <div key={u} className="grid grid-cols-4 gap-2 items-center">
-                    <span className="font-heading text-sm tracking-wide" style={{ color: style.color }}>{style.label}</span>
-                    <span className="text-center font-heading text-base text-pool-chalk">{stat.total}</span>
-                    <span className="text-center font-body text-sm text-pool-chalk">{(stat.total / stat.games).toFixed(1)}</span>
-                    <span className="text-center font-heading text-base text-pool-gold">{stat.best}</span>
+                  <div key={u}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <PlayerAvatar username={u} size={28} />
+                        <span className="font-heading text-sm tracking-wider" style={{ color: style.color }}>
+                          {style.label.toUpperCase()}
+                        </span>
+                        {i === 0 && <span className="text-xs">👑</span>}
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-heading text-2xl text-pool-chalk">{acc}%</span>
+                        <span className="font-body text-xs text-pool-chalk-dim">{p.shots} shots</span>
+                      </div>
+                    </div>
+                    <div className="h-2.5 bg-pool-border rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${acc}%`, background: `linear-gradient(90deg, ${style.color}88, ${style.color})` }}
+                      />
+                    </div>
+                    <div className="flex gap-4 mt-1.5">
+                      <span className="font-body text-xs text-pool-chalk-dim">
+                        Err <span className="text-pool-red">{pct(p.errors, p.shots)}%</span>
+                      </span>
+                      <span className="font-body text-xs text-pool-chalk-dim">
+                        Lucky <span className="text-pool-gold">{pct(p.lucky, p.shots)}%</span>
+                      </span>
+                      <span className="font-body text-xs text-pool-chalk-dim">
+                        {p.potted} pots · {p.gamesPlayed > 0 ? (p.potted / p.gamesPlayed).toFixed(1) : '—'}/game
+                      </span>
+                    </div>
                   </div>
                 )
               })}
-            </div>
           </div>
-        </div>
+        </section>
       )}
 
-      {/* H2H */}
-      <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
-        <div className="px-4 py-3 border-b border-pool-border">
-          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim">HEAD TO HEAD</p>
-        </div>
-        <div className="p-4 grid gap-3">
+      {/* ── HEAD TO HEAD ────────────────────────────────────────────── */}
+      <section className="px-4 py-2">
+        <SectionHeader title="HEAD TO HEAD" />
+        <div className="mt-3 space-y-3">
           {PLAYERS.flatMap((u, i) => PLAYERS.slice(i + 1).map(v => {
-            const uWins = h2h[u][v] ?? 0
-            const vWins = h2h[v][u] ?? 0
-            const total = uWins + vWins
-            const uPct = total === 0 ? 50 : Math.round((uWins / total) * 100)
+            const uWins  = h2h[u][v] ?? 0
+            const vWins  = h2h[v][u] ?? 0
+            const total  = uWins + vWins
+            const uPct   = total === 0 ? 50 : Math.round((uWins / total) * 100)
             const uStyle = PLAYER_STYLES[u]
             const vStyle = PLAYER_STYLES[v]
+            const leader = uWins > vWins ? uStyle.label : vWins > uWins ? vStyle.label : null
             return (
-              <div key={`${u}-${v}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-heading text-sm tracking-wide" style={{ color: uStyle.color }}>{uStyle.label}</span>
-                  <span className="font-heading text-base text-pool-chalk">{uWins} – {vWins}</span>
-                  <span className="font-heading text-sm tracking-wide" style={{ color: vStyle.color }}>{vStyle.label}</span>
+              <div key={`${u}-${v}`} className="bg-pool-surface rounded-2xl border border-pool-border p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <PlayerAvatar username={u} size={32} />
+                    <span className="font-heading text-sm" style={{ color: uStyle.color }}>{uStyle.label}</span>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-heading text-2xl text-pool-chalk">{uWins}–{vWins}</p>
+                    <p className="font-body text-xs text-pool-chalk-dim">
+                      {leader ? `${leader} leads` : total > 0 ? 'Tied' : 'No games yet'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-heading text-sm" style={{ color: vStyle.color }}>{vStyle.label}</span>
+                    <PlayerAvatar username={v} size={32} />
+                  </div>
                 </div>
-                <div className="h-2 rounded-full overflow-hidden bg-pool-border flex">
-                  <div className="h-full transition-all duration-500" style={{ width: `${uPct}%`, backgroundColor: uStyle.color }} />
+                <div className="h-2.5 rounded-full overflow-hidden bg-pool-border flex">
+                  <div className="h-full transition-all duration-700" style={{ width: `${uPct}%`, backgroundColor: uStyle.color }} />
                   <div className="h-full flex-1" style={{ backgroundColor: vStyle.color }} />
                 </div>
               </div>
             )
           }))}
         </div>
-      </div>
+      </section>
 
-      {/* Wins by game number */}
-      <div className="bg-pool-surface rounded-2xl border border-pool-border p-4">
-        <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-4">WINS BY GAME NUMBER</p>
-        <ResponsiveContainer width="100%" height={150}>
-          <BarChart data={gameNumData} margin={{ top: 0, right: 4, bottom: 0, left: -20 }}>
-            <XAxis dataKey="game" tick={{ fill: '#7a786f', fontSize: 11, fontFamily: 'Inter' }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} allowDecimals={false} />
-            <Tooltip contentStyle={{ background: '#1a2018', border: '1px solid #2e3a2b', borderRadius: 8, fontFamily: 'Inter', fontSize: 12 }} itemStyle={{ color: '#c8c4b5' }} />
-            {PLAYERS.map(u => (
-              <Bar key={u} dataKey={u} name={PLAYER_STYLES[u].label} fill={COLORS[u]} radius={[3,3,0,0]} stackId="a" />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Streaks & Records */}
-      <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
-        <div className="px-4 py-3 border-b border-pool-border">
-          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim">STREAKS &amp; RECORDS</p>
-        </div>
-        <div className="p-4">
-          <div className="grid grid-cols-4 gap-2 text-xs font-body text-pool-chalk-dim mb-3 pb-2 border-b border-pool-border/50">
-            <span /><span className="text-center">Current W</span><span className="text-center">Best Run</span><span className="text-center">Record Acc</span>
-          </div>
-          <div className="space-y-3">
-            {standings.map(p => {
-              const style = PLAYER_STYLES[p.username]
-              return (
-                <div key={p.username} className="grid grid-cols-4 gap-2 items-center">
-                  <span className="font-heading text-sm tracking-wide" style={{ color: style.color }}>{style.label}</span>
-                  <div className="text-center">
-                    {currentStreaks[p.username] > 0
-                      ? <span className="font-heading text-base text-pool-gold">🔥{currentStreaks[p.username]}</span>
-                      : <span className="font-body text-sm text-pool-chalk-dim">—</span>}
+      {/* ── FORM & STREAKS ──────────────────────────────────────────── */}
+      <section className="px-4 py-2">
+        <SectionHeader title="FORM & STREAKS" sub="last 5 games" />
+        <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden mt-3">
+          {standings.map((p, i) => {
+            const style = PLAYER_STYLES[p.username]
+            return (
+              <div
+                key={p.username}
+                className={`flex items-center gap-3 px-4 py-3 ${i < standings.length - 1 ? 'border-b border-pool-border' : ''}`}
+              >
+                <PlayerAvatar username={p.username} size={36} />
+                <div className="flex-1 min-w-0">
+                  <p className="font-heading text-sm tracking-wide" style={{ color: style.color }}>
+                    {p.displayName.toUpperCase()}
+                  </p>
+                  <div className="flex items-center gap-1 mt-1">
+                    {(form[p.username] ?? []).length > 0
+                      ? (form[p.username] ?? []).map((win, j) => (
+                          <span
+                            key={j}
+                            className="w-5 h-5 rounded-full flex items-center justify-center font-heading"
+                            style={{
+                              fontSize: 9,
+                              background: win ? `${style.color}22` : '#0e1e12',
+                              color:      win ? style.color : '#7a786f',
+                              border:     `1.5px solid ${win ? style.color + '55' : '#1f3525'}`,
+                            }}
+                          >
+                            {win ? 'W' : 'L'}
+                          </span>
+                        ))
+                      : <span className="font-body text-xs text-pool-chalk-dim">No games yet</span>
+                    }
                   </div>
-                  <span className="text-center font-heading text-base text-pool-chalk">{longestStreaks[p.username]}</span>
-                  <span className="text-center font-body text-sm text-pool-chalk">
-                    {recordAccuracy[p.username] > 0 ? `${recordAccuracy[p.username]}%` : '—'}
-                  </span>
                 </div>
-              )
-            })}
-          </div>
-          <div className="mt-4 pt-3 border-t border-pool-border/50">
-            <div className="grid grid-cols-4 gap-2 text-xs font-body text-pool-chalk-dim mb-3 pb-2 border-b border-pool-border/50">
-              <span /><span className="text-center col-span-2">Most Pots (game)</span><span className="text-center">Best Break</span>
-            </div>
-            {standings.map(p => {
-              const style = PLAYER_STYLES[p.username]
-              return (
-                <div key={p.username} className="grid grid-cols-4 gap-2 items-center mb-3 last:mb-0">
-                  <span className="font-heading text-sm tracking-wide" style={{ color: style.color }}>{style.label}</span>
-                  <span className="text-center col-span-2 font-heading text-base text-pool-chalk">{recordPots[p.username]}</span>
-                  <span className="text-center font-heading text-base text-pool-gold">{breakStats[p.username].best}</span>
+                <div className="text-right shrink-0">
+                  {currentStreaks[p.username] > 0
+                    ? <p className="font-heading text-base text-pool-gold">🔥 {currentStreaks[p.username]}</p>
+                    : <p className="font-body text-sm text-pool-chalk-dim">—</p>
+                  }
+                  <p className="font-body text-xs text-pool-chalk-dim">Best: {longestStreaks[p.username]}</p>
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            )
+          })}
         </div>
-      </div>
+      </section>
 
-      {/* Fun facts */}
-      <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
-        <div className="px-4 py-3 border-b border-pool-border">
-          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim">FUN FACTS</p>
+      {/* ── RECORDS ─────────────────────────────────────────────────── */}
+      <section className="px-4 py-2">
+        <SectionHeader title="RECORDS" />
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          {recordAccuracy[bestAccPlayer] > 0 && (
+            <RecordCard icon="🎯" label="Peak Accuracy" username={bestAccPlayer}
+              value={`${recordAccuracy[bestAccPlayer]}%`} sub="best single game" />
+          )}
+          {recordPots[mostPotsPlayer] > 0 && (
+            <RecordCard icon="💥" label="Most Pots" username={mostPotsPlayer}
+              value={recordPots[mostPotsPlayer].toString()} sub="in a single game" />
+          )}
+          {bestStreak.streak > 0 && (
+            <RecordCard icon="🔥" label="Win Streak" username={bestStreak.username}
+              value={`${bestStreak.streak} in a row`} sub="all-time best" />
+          )}
+          {playerMap[mostBlackPlayer].blackBallIncidents > 0 && (
+            <RecordCard icon="🖤" label="Gifted Wins" username={mostBlackPlayer}
+              value={`${playerMap[mostBlackPlayer].blackBallIncidents}×`} sub="potted the black" />
+          )}
         </div>
-        <div className="divide-y divide-pool-border">
+      </section>
+
+      {/* ── ELO RATINGS ─────────────────────────────────────────────── */}
+      {eloAtSession.length > 0 && (
+        <section className="px-4 py-2">
+          <SectionHeader title="ELO RATINGS" sub="K=32, starts at 1200" />
+          <div className="bg-pool-surface rounded-2xl border border-pool-border p-4 mt-3">
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              {PLAYERS.map(u => {
+                const style = PLAYER_STYLES[u]
+                const delta = eloRatings[u] - 1200
+                return (
+                  <div key={u} className="text-center">
+                    <p className="font-heading text-2xl" style={{ color: style.color }}>{eloRatings[u]}</p>
+                    <p className="font-body text-xs text-pool-chalk-dim">{style.label}</p>
+                    <p className={`font-body text-xs mt-0.5 ${delta >= 0 ? 'text-pool-green-bright' : 'text-pool-red'}`}>
+                      {delta >= 0 ? '+' : ''}{delta}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+            {eloAtSession.length > 1 ? (
+              <ResponsiveContainer width="100%" height={140}>
+                <LineChart data={eloAtSession} margin={{ top: 4, right: 4, bottom: 0, left: -10 }}>
+                  <XAxis dataKey="label" tick={chartAxisProps} axisLine={false} tickLine={false} />
+                  <YAxis tick={chartAxisProps} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
+                  <Tooltip {...chartTooltipStyle} />
+                  {PLAYERS.map(u => (
+                    <Line key={u} type="monotone" dataKey={u} name={PLAYER_STYLES[u].label}
+                      stroke={COLORS[u]} strokeWidth={2.5} dot={{ r: 3, fill: COLORS[u] }} activeDot={{ r: 5 }} />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="font-body text-xs text-pool-chalk-dim text-center">Play more sessions to see the trend</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ── POINTS RACE ─────────────────────────────────────────────── */}
+      {timelineData.length > 1 && (
+        <section className="px-4 py-2">
+          <SectionHeader title="POINTS RACE" />
+          <div className="bg-pool-surface rounded-2xl border border-pool-border p-4 mt-3">
+            <ResponsiveContainer width="100%" height={160}>
+              <LineChart data={timelineData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                <XAxis dataKey="label" tick={chartAxisProps} axisLine={false} tickLine={false} />
+                <YAxis tick={chartAxisProps} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip {...chartTooltipStyle} />
+                {PLAYERS.map(u => (
+                  <Line key={u} type="monotone" dataKey={u} name={PLAYER_STYLES[u].label}
+                    stroke={COLORS[u]} strokeWidth={2.5} dot={{ r: 3, fill: COLORS[u] }} activeDot={{ r: 5 }} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      )}
+
+      {/* ── ACCURACY OVER TIME ──────────────────────────────────────── */}
+      {accuracyTrend.length > 1 && totalShots > 0 && (
+        <section className="px-4 py-2">
+          <SectionHeader title="ACCURACY OVER TIME" />
+          <div className="bg-pool-surface rounded-2xl border border-pool-border p-4 mt-3">
+            <ResponsiveContainer width="100%" height={160}>
+              <LineChart data={accuracyTrend} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                <XAxis dataKey="label" tick={chartAxisProps} axisLine={false} tickLine={false} />
+                <YAxis tick={chartAxisProps} axisLine={false} tickLine={false} unit="%" domain={[0, 100]} />
+                <Tooltip {...chartTooltipStyle} formatter={(v: number) => [`${v}%`]} />
+                {PLAYERS.map(u => (
+                  <Line key={u} type="monotone" dataKey={u} name={PLAYER_STYLES[u].label}
+                    stroke={COLORS[u]} strokeWidth={2.5} dot={{ r: 3, fill: COLORS[u] }} activeDot={{ r: 5 }} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      )}
+
+      {/* ── WINS BY GAME SLOT ───────────────────────────────────────── */}
+      <section className="px-4 py-2">
+        <SectionHeader title="WINS BY GAME SLOT" sub="who owns each position" />
+        <div className="bg-pool-surface rounded-2xl border border-pool-border p-4 mt-3">
+          <ResponsiveContainer width="100%" height={140}>
+            <BarChart data={gameNumData} margin={{ top: 0, right: 4, bottom: 0, left: -20 }}>
+              <XAxis dataKey="game" tick={chartAxisProps} axisLine={false} tickLine={false} />
+              <YAxis tick={chartAxisProps} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip {...chartTooltipStyle} />
+              {PLAYERS.map(u => (
+                <Bar key={u} dataKey={u} name={PLAYER_STYLES[u].label} fill={COLORS[u]} radius={[3,3,0,0]} stackId="a" />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+
+      {/* ── GAME DURATION ───────────────────────────────────────────── */}
+      {avgDuration != null && (
+        <section className="px-4 py-2">
+          <SectionHeader title="GAME DURATION" />
+          <div className="bg-pool-surface rounded-2xl border border-pool-border p-4 mt-3">
+            <div className="grid grid-cols-3 divide-x divide-pool-border">
+              <div className="text-center px-2">
+                <p className="font-body text-xs text-pool-chalk-dim mb-1">Average</p>
+                <p className="font-heading text-xl text-pool-chalk tabular-nums">{formatTime(avgDuration)}</p>
+              </div>
+              <div className="text-center px-2">
+                <p className="font-body text-xs text-pool-chalk-dim mb-1">Fastest</p>
+                <p className="font-heading text-xl text-pool-green-bright tabular-nums">{minDuration != null ? formatTime(minDuration) : '—'}</p>
+              </div>
+              <div className="text-center px-2">
+                <p className="font-body text-xs text-pool-chalk-dim mb-1">Longest</p>
+                <p className="font-heading text-xl text-pool-gold tabular-nums">{maxDuration != null ? formatTime(maxDuration) : '—'}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── FUN FACTS ───────────────────────────────────────────────── */}
+      <section className="px-4 py-2">
+        <SectionHeader title="FUN FACTS" />
+        <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden mt-3">
           <Fact label="Overall pot accuracy" value={`${overallAcc}%`} icon="🎯" />
           <Fact label="Total shots recorded" value={totalShots.toLocaleString()} icon="📊" />
           <Fact label="Total games played" value={games.length.toString()} icon="🎱" />
@@ -633,14 +678,46 @@ export default function StatsClient({ games, shots }: { games: RawGame[]; shots:
             return <Fact key={u} label={`${p.displayName} fluked a pot`} value={`${p.lucky} times`} icon="★" />
           })}
         </div>
+      </section>
+
+    </div>
+  )
+}
+
+// ── Shared helper components ─────────────────────────────────────────────────
+
+function SectionHeader({ title, sub }: { title: string; sub?: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <h2 className="font-heading text-sm tracking-[0.15em] text-pool-chalk shrink-0">{title}</h2>
+      {sub && <p className="font-body text-xs text-pool-chalk-dim shrink-0">{sub}</p>}
+      <div className="flex-1 h-px bg-pool-border" />
+    </div>
+  )
+}
+
+function RecordCard({ icon, label, username, value, sub }: {
+  icon: string; label: string; username: PlayerUsername; value: string; sub: string
+}) {
+  const style = PLAYER_STYLES[username]
+  return (
+    <div className="bg-pool-surface rounded-xl border p-3" style={{ borderColor: `${style.color}33` }}>
+      <div className="flex items-start justify-between mb-2">
+        <span className="text-xl">{icon}</span>
+        <span className="font-heading text-xs tracking-wider" style={{ color: style.color }}>
+          {style.label.toUpperCase()}
+        </span>
       </div>
+      <p className="font-heading text-xl text-pool-chalk">{value}</p>
+      <p className="font-body text-xs text-pool-chalk-dim mt-0.5">{label}</p>
+      <p className="font-body text-xs mt-0.5" style={{ color: `${style.color}88` }}>{sub}</p>
     </div>
   )
 }
 
 function Fact({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3">
+    <div className="flex items-center gap-3 px-4 py-3 border-b border-pool-border last:border-0">
       <span className="text-lg w-7">{icon}</span>
       <span className="font-body text-sm text-pool-chalk-dim flex-1">{label}</span>
       <span className="font-heading text-base text-pool-chalk">{value}</span>
