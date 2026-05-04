@@ -220,43 +220,37 @@ export default function GamePage() {
     return () => { supabase.removeChannel(channel) }
   }, [gameId, fetchGame]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch all-time historical shot accuracy for both players (once)
+  // Fetch historical shot accuracy + H2H in parallel (once per game/players combo)
   useEffect(() => {
     if (!game) return
-    supabase
-      .from('shots')
-      .select('player_id, potted')
-      .in('player_id', [game.player1.id, game.player2.id])
-      .neq('game_id', gameId)
-      .then(({ data }) => {
-        if (!data) return
+    const p1id = game.player1.id
+    const p2id = game.player2.id
+    Promise.all([
+      supabase
+        .from('shots')
+        .select('player_id, potted')
+        .in('player_id', [p1id, p2id])
+        .neq('game_id', gameId),
+      supabase
+        .from('games')
+        .select('winner_id, player1_id, player2_id')
+        .in('player1_id', [p1id, p2id])
+        .in('player2_id', [p1id, p2id])
+        .eq('is_complete', true)
+        .neq('id', gameId),
+    ]).then(([{ data: shotsData }, { data: gamesData }]) => {
+      if (shotsData) {
         const acc: Record<string, { shots: number; potted: number }> = {}
-        for (const s of data as { player_id: string; potted: boolean }[]) {
+        for (const s of shotsData as { player_id: string; potted: boolean }[]) {
           if (!acc[s.player_id]) acc[s.player_id] = { shots: 0, potted: 0 }
           acc[s.player_id].shots++
           if (s.potted) acc[s.player_id].potted++
         }
         setHistStats(acc)
-      })
-  }, [game?.player1.id, game?.player2.id, gameId]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fetch head-to-head record between these two players (excluding this game)
-  useEffect(() => {
-    if (!game) return
-    const p1id = game.player1.id
-    const p2id = game.player2.id
-    supabase
-      .from('games')
-      .select('winner_id, player1_id, player2_id')
-      .in('player1_id', [p1id, p2id])
-      .in('player2_id', [p1id, p2id])
-      .eq('is_complete', true)
-      .neq('id', gameId)
-      .then(({ data }) => {
-        if (!data) return
+      }
+      if (gamesData) {
         let p1Wins = 0, p2Wins = 0
-        for (const g of data as { winner_id: string; player1_id: string; player2_id: string }[]) {
-          // Only count direct matchups between these two
+        for (const g of gamesData as { winner_id: string; player1_id: string; player2_id: string }[]) {
           const isMatchup = (g.player1_id === p1id && g.player2_id === p2id)
             || (g.player1_id === p2id && g.player2_id === p1id)
           if (!isMatchup) continue
@@ -264,7 +258,8 @@ export default function GamePage() {
           else if (g.winner_id === p2id) p2Wins++
         }
         setH2hStats({ p1Wins, p2Wins })
-      })
+      }
+    })
   }, [game?.player1.id, game?.player2.id, gameId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Show win celebration when game transitions from in-progress to complete

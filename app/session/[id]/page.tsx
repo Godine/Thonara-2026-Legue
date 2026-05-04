@@ -108,110 +108,110 @@ export default function SessionPage() {
   }, [id])
 
   useEffect(() => {
-    supabase.from('league_standings').select('username, display_name, wins, losses, games_played')
-      .then(({ data }) => { if (data) setStandings(data as Standing[]) })
+    Promise.all([
+      supabase.from('league_standings').select('username, display_name, wins, losses, games_played'),
+      supabase.from('games')
+        .select(`id, winner_id, player1_id, player2_id, session_id,
+          player1:players!games_player1_id_fkey(id, username, display_name),
+          player2:players!games_player2_id_fkey(id, username, display_name),
+          winner:players!games_winner_id_fkey(id, username, display_name),
+          session:sessions(id, date)`)
+        .eq('is_complete', true)
+        .order('created_at', { ascending: true }),
+    ]).then(([{ data: standingsData }, { data: gamesData }]) => {
+      if (standingsData) setStandings(standingsData as Standing[])
 
-    // Fetch all completed games to compute form, streaks, H2H, last session
-    supabase.from('games')
-      .select(`id, winner_id, player1_id, player2_id, session_id,
-        player1:players!games_player1_id_fkey(id, username, display_name),
-        player2:players!games_player2_id_fkey(id, username, display_name),
-        winner:players!games_winner_id_fkey(id, username, display_name),
-        session:sessions(id, date)`)
-      .eq('is_complete', true)
-      .order('created_at', { ascending: true })
-      .then(({ data: gamesData }) => {
-        if (!gamesData?.length) return
-        const gs = gamesData as any[]
+      if (!gamesData?.length) return
+      const gs = gamesData as any[]
 
-        // Build id→username map
-        const idToUser: Record<string, string> = {}
-        const idToName: Record<string, string> = {}
-        for (const g of gs) {
-          idToUser[g.player1.id] = g.player1.username
-          idToUser[g.player2.id] = g.player2.username
-          idToName[g.player1.id] = g.player1.display_name
-          idToName[g.player2.id] = g.player2.display_name
+      // Build id→username map
+      const idToUser: Record<string, string> = {}
+      const idToName: Record<string, string> = {}
+      for (const g of gs) {
+        idToUser[g.player1.id] = g.player1.username
+        idToUser[g.player2.id] = g.player2.username
+        idToName[g.player1.id] = g.player1.display_name
+        idToName[g.player2.id] = g.player2.display_name
+      }
+
+      // Per-player game list (ordered)
+      const byPlayer: Record<string, { winnerId: string; sessionId: string; date: string }[]> = {}
+      for (const g of gs) {
+        for (const pid of [g.player1.id, g.player2.id]) {
+          if (!byPlayer[pid]) byPlayer[pid] = []
+          byPlayer[pid].push({ winnerId: g.winner_id, sessionId: g.session_id, date: g.session.date })
         }
+      }
 
-        // Per-player game list (ordered)
-        const byPlayer: Record<string, { winnerId: string; sessionId: string; date: string }[]> = {}
-        for (const g of gs) {
-          for (const pid of [g.player1.id, g.player2.id]) {
-            if (!byPlayer[pid]) byPlayer[pid] = []
-            byPlayer[pid].push({ winnerId: g.winner_id, sessionId: g.session_id, date: g.session.date })
-          }
-        }
+      // Form: last 5 results per player (true = win)
+      const form: Record<string, boolean[]> = {}
+      for (const [pid, playerGames] of Object.entries(byPlayer)) {
+        const u = idToUser[pid]
+        if (u) form[u] = playerGames.slice(-5).map(g => g.winnerId === pid)
+      }
 
-        // Form: last 5 results per player (true = win)
-        const form: Record<string, boolean[]> = {}
-        for (const [pid, playerGames] of Object.entries(byPlayer)) {
-          const u = idToUser[pid]
-          if (u) form[u] = playerGames.slice(-5).map(g => g.winnerId === pid)
+      // Current win streak
+      const streaks: Record<string, number> = {}
+      for (const [pid, playerGames] of Object.entries(byPlayer)) {
+        const u = idToUser[pid]
+        if (!u) continue
+        let s = 0
+        for (let i = playerGames.length - 1; i >= 0; i--) {
+          if (playerGames[i].winnerId === pid) s++
+          else break
         }
+        streaks[u] = s
+      }
 
-        // Current win streak
-        const streaks: Record<string, number> = {}
-        for (const [pid, playerGames] of Object.entries(byPlayer)) {
-          const u = idToUser[pid]
-          if (!u) continue
-          let s = 0
-          for (let i = playerGames.length - 1; i >= 0; i--) {
-            if (playerGames[i].winnerId === pid) s++
-            else break
-          }
-          streaks[u] = s
+      // H2H for all 3 pairs
+      const h2hMap: Record<string, Record<string, number>> = {}
+      for (const g of gs) {
+        if (!g.winner_id) continue
+        const wu = idToUser[g.winner_id]
+        const lu = wu === g.player1.username ? g.player2.username : g.player1.username
+        if (!h2hMap[wu]) h2hMap[wu] = {}
+        h2hMap[wu][lu] = (h2hMap[wu][lu] ?? 0) + 1
+      }
+      const usernames = Array.from(new Set(Object.values(idToUser)))
+      const pairs: { u1: string; u2: string; n1: string; n2: string; w1: number; w2: number }[] = []
+      for (let i = 0; i < usernames.length; i++) {
+        for (let j = i + 1; j < usernames.length; j++) {
+          const u1 = usernames[i], u2 = usernames[j]
+          const p1id = Object.keys(idToUser).find(k => idToUser[k] === u1) ?? ''
+          const p2id = Object.keys(idToUser).find(k => idToUser[k] === u2) ?? ''
+          pairs.push({
+            u1, u2,
+            n1: idToName[p1id] ?? u1,
+            n2: idToName[p2id] ?? u2,
+            w1: h2hMap[u1]?.[u2] ?? 0,
+            w2: h2hMap[u2]?.[u1] ?? 0,
+          })
         }
+      }
 
-        // H2H for all 3 pairs
-        const h2hMap: Record<string, Record<string, number>> = {}
-        for (const g of gs) {
-          if (!g.winner_id) continue
-          const wu = idToUser[g.winner_id]
-          const lu = wu === g.player1.username ? g.player2.username : g.player1.username
-          if (!h2hMap[wu]) h2hMap[wu] = {}
-          h2hMap[wu][lu] = (h2hMap[wu][lu] ?? 0) + 1
+      // Last session (excluding current)
+      const sessionDates: Record<string, string> = {}
+      for (const g of gs) sessionDates[g.session_id] = g.session.date
+      const otherSessions = Object.entries(sessionDates)
+        .filter(([sid]) => sid !== id)
+        .sort(([, a], [, b]) => b.localeCompare(a))
+      let lastSession: { date: string; wins: { name: string; count: number }[] } | null = null
+      if (otherSessions.length > 0) {
+        const [lastSid, lastDate] = otherSessions[0]
+        const lastGames = gs.filter(g => g.session_id === lastSid && g.winner_id)
+        const winCount: Record<string, number> = {}
+        for (const g of lastGames) {
+          const n = idToName[g.winner_id]
+          if (n) winCount[n] = (winCount[n] ?? 0) + 1
         }
-        const usernames = Array.from(new Set(Object.values(idToUser)))
-        const pairs: { u1: string; u2: string; n1: string; n2: string; w1: number; w2: number }[] = []
-        for (let i = 0; i < usernames.length; i++) {
-          for (let j = i + 1; j < usernames.length; j++) {
-            const u1 = usernames[i], u2 = usernames[j]
-            const p1id = Object.keys(idToUser).find(k => idToUser[k] === u1) ?? ''
-            const p2id = Object.keys(idToUser).find(k => idToUser[k] === u2) ?? ''
-            pairs.push({
-              u1, u2,
-              n1: idToName[p1id] ?? u1,
-              n2: idToName[p2id] ?? u2,
-              w1: h2hMap[u1]?.[u2] ?? 0,
-              w2: h2hMap[u2]?.[u1] ?? 0,
-            })
-          }
+        lastSession = {
+          date: lastDate,
+          wins: Object.entries(winCount).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count })),
         }
+      }
 
-        // Last session (excluding current)
-        const sessionDates: Record<string, string> = {}
-        for (const g of gs) sessionDates[g.session_id] = g.session.date
-        const otherSessions = Object.entries(sessionDates)
-          .filter(([sid]) => sid !== id)
-          .sort(([, a], [, b]) => b.localeCompare(a))
-        let lastSession: { date: string; wins: { name: string; count: number }[] } | null = null
-        if (otherSessions.length > 0) {
-          const [lastSid, lastDate] = otherSessions[0]
-          const lastGames = gs.filter(g => g.session_id === lastSid && g.winner_id)
-          const winCount: Record<string, number> = {}
-          for (const g of lastGames) {
-            const n = idToName[g.winner_id]
-            if (n) winCount[n] = (winCount[n] ?? 0) + 1
-          }
-          lastSession = {
-            date: lastDate,
-            wins: Object.entries(winCount).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count })),
-          }
-        }
-
-        setPreviewStats({ form, streaks, h2h: pairs, lastSession })
-      })
+      setPreviewStats({ form, streaks, h2h: pairs, lastSession })
+    })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
