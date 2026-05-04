@@ -10,6 +10,9 @@ import {
   insertShot, insertShots, deleteShot,
   type GameWithPlayers,
 } from '@/lib/queries'
+import { getPlayerStats, formatTime, type PlayerStats } from '@/lib/stats'
+import { computeOdds } from '@/lib/odds'
+import { pickTrashTalk } from '@/lib/trash-talk'
 import { GAME_SCHEDULE, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import { getStoredPlayer } from '@/components/PlayerGate'
 import PlayerBall from '@/components/PlayerBall'
@@ -18,144 +21,6 @@ import WinCelebration from '@/components/WinCelebration'
 import type { Player, Shot } from '@/types/database'
 
 type GameFull = GameWithPlayers
-
-interface PlayerStats {
-  shots: number
-  potted: number
-  lucky: number
-  errors: number
-}
-
-function getStats(shots: Shot[], playerId: string): PlayerStats {
-  const mine = shots.filter(s => s.player_id === playerId)
-  return {
-    shots: mine.length,
-    potted: mine.filter(s => s.potted).length,
-    lucky: mine.filter(s => s.is_lucky).length,
-    errors: mine.filter(s => s.is_error).length,
-  }
-}
-
-function pickTrashTalk(
-  winner: Player, loser: Player,
-  wStats: PlayerStats, lStats: PlayerStats,
-  shots: Shot[], loserPottedBlack: boolean
-): string {
-  const lines: string[] = []
-  const wAcc  = wStats.shots > 0 ? Math.round((wStats.potted / wStats.shots) * 100) : 0
-  const lAcc  = lStats.shots > 0 ? Math.round((lStats.potted / lStats.shots) * 100) : 0
-  const wName = winner.display_name
-  const lName = loser.display_name
-
-  if (loserPottedBlack)
-    lines.push(`${lName} literally handed ${wName} the win. Gifted. Wrapped. With a bow. 🎁`)
-  if (lStats.errors >= 3)
-    lines.push(`${lStats.errors} errors from ${lName}. The table wasn't the problem. 🫠`)
-  if (lStats.lucky >= 2)
-    lines.push(`${lStats.lucky} flukes from ${lName} and still lost? That's impressive in the wrong way. 🍀😬`)
-  if (wStats.lucky >= 2 && wAcc < 50)
-    lines.push(`${wName} shot ${wAcc}% but won. Pure luck wrapped in a victory dance. 💃`)
-  if (wAcc >= 70 && wStats.shots >= 5)
-    lines.push(`${wAcc}% accuracy from ${wName}. Clinical. Cold-blooded. No mercy. 🎯`)
-  if (lAcc < 30 && lStats.shots >= 5)
-    lines.push(`${lAcc}% accuracy, ${lName}? The pockets were right there. Just saying. 👀`)
-  if (wStats.shots > 0 && lStats.shots > 0 && wStats.shots < lStats.shots * 0.6)
-    lines.push(`${wName} needed ${wStats.shots} shots. ${lName} needed ${lStats.shots}. Let that sink in. ⏱️`)
-  if (lStats.potted === 0 && lStats.shots >= 3)
-    lines.push(`${lStats.shots} shots. Zero pots. ${lName}, the table called — it wants a break. 😭`)
-
-  if (lines.length === 0) {
-    const fallbacks = [
-      `${wName} wins again. ${lName} will have their revenge… eventually. 🔮`,
-      `Another day, another L for ${lName}. At least they showed up. 🫡`,
-      `${wName} took it home tonight. Clean, easy, inevitable. 👑`,
-    ]
-    return fallbacks[Math.floor(Math.random() * fallbacks.length)]
-  }
-  return lines[Math.floor(Math.random() * lines.length)]
-}
-
-// Exponential decay weighting — recent shots count more (half-life ≈ 4 shots)
-function weightedAccuracy(shots: Shot[], playerId: string, decay = 0.8): number {
-  const mine = shots.filter(s => s.player_id === playerId)
-  if (mine.length === 0) return 0
-  let wPots = 0, wTotal = 0
-  const n = mine.length
-  for (let i = 0; i < n; i++) {
-    const w = Math.pow(decay, n - 1 - i) // most recent = weight 1, older = smaller
-    wPots  += w * (mine[i].potted ? 1 : 0)
-    wTotal += w
-  }
-  return wPots / wTotal
-}
-
-// Markov chain: P(P1 wins) given ball counts and whose turn it is.
-// Solved as a 2-equation linear system per (r1, r2) cell to avoid circular recursion.
-function solveMarkov(r1: number, r2: number, a1: number, a2: number, p1Turn: boolean): number {
-  // dp[i][j] = [P(P1 wins | P1's turn), P(P1 wins | P2's turn)]
-  const dp: [number, number][][] = Array.from({ length: r1 + 1 }, () =>
-    Array.from({ length: r2 + 1 }, () => [0, 0] as [number, number])
-  )
-  // Base cases: whoever has 0 balls left has won
-  for (let j = 0; j <= r2; j++) dp[0][j] = [1, 1]  // P1 cleared → P1 wins
-  for (let i = 1; i <= r1; i++) dp[i][0] = [0, 0]  // P2 cleared → P2 wins
-
-  const denom = a1 + a2 - a1 * a2 // always > 0 when a1,a2 ∈ (0,1)
-  for (let i = 1; i <= r1; i++) {
-    for (let j = 1; j <= r2; j++) {
-      const A = dp[i - 1][j][0]  // P1 pots → r1-1, still P1's turn
-      const B = dp[i][j - 1][1]  // P2 pots → r2-1, still P2's turn
-      const p1t = (a1 * A + (1 - a1) * a2 * B) / denom
-      dp[i][j] = [p1t, a2 * B + (1 - a2) * p1t]
-    }
-  }
-  return dp[r1][r2][p1Turn ? 0 : 1]
-}
-
-function computeOdds(
-  shots: Shot[],
-  p1Id: string, p2Id: string,
-  p1Remaining: number, p2Remaining: number,
-  p1Prior: { shots: number; potted: number },
-  p2Prior: { shots: number; potted: number },
-  h2h: { p1Wins: number; p2Wins: number },
-  isP1Turn: boolean,
-): { p1: number; p2: number } {
-  const hasData = shots.length + p1Prior.shots + p2Prior.shots + h2h.p1Wins + h2h.p2Wins > 0
-  if (!hasData) return { p1: 50, p2: 50 }
-
-  // Momentum-weighted accuracy blended with career history + Laplace smoothing
-  const p1Mom = weightedAccuracy(shots, p1Id)
-  const p2Mom = weightedAccuracy(shots, p2Id)
-  const p1GameShots = shots.filter(s => s.player_id === p1Id).length
-  const p2GameShots = shots.filter(s => s.player_id === p2Id).length
-  const raw1 = p1GameShots > 0
-    ? (p1Mom * p1GameShots + p1Prior.potted + 1) / (p1GameShots + p1Prior.shots + 2)
-    : (p1Prior.potted + 1) / (p1Prior.shots + 2)
-  const raw2 = p2GameShots > 0
-    ? (p2Mom * p2GameShots + p2Prior.potted + 1) / (p2GameShots + p2Prior.shots + 2)
-    : (p2Prior.potted + 1) / (p2Prior.shots + 2)
-  const a1 = Math.max(0.05, Math.min(0.95, raw1))
-  const a2 = Math.max(0.05, Math.min(0.95, raw2))
-
-  // Markov win probability from current ball positions
-  const markovP1 = solveMarkov(p1Remaining, p2Remaining, a1, a2, isP1Turn)
-
-  // Head-to-head nudge (fades as more shots accumulate in this game)
-  const h2hTotal = h2h.p1Wins + h2h.p2Wins
-  const h2hP1 = h2hTotal > 0 ? h2h.p1Wins / h2hTotal : 0.5
-  const h2hWeight = Math.min(h2hTotal / 20, 0.25) * Math.max(0, 1 - shots.length / 30)
-
-  const final = markovP1 * (1 - h2hWeight) + h2hP1 * h2hWeight
-  const p1Pct = Math.round(final * 100)
-  return { p1: p1Pct, p2: 100 - p1Pct }
-}
-
-function formatTime(s: number): string {
-  const m = Math.floor(s / 60)
-  const sec = s % 60
-  return `${m}:${sec.toString().padStart(2, '0')}`
-}
 
 type ShotType = 'potted' | 'lucky' | 'miss' | 'error'
 
@@ -379,8 +244,8 @@ export default function GamePage() {
   const p2 = game.player2
   const p1Style = PLAYER_STYLES[p1.username as PlayerUsername]
   const p2Style = PLAYER_STYLES[p2.username as PlayerUsername]
-  const p1Stats = getStats(shots, p1.id)
-  const p2Stats = getStats(shots, p2.id)
+  const p1Stats = getPlayerStats(shots, p1.id)
+  const p2Stats = getPlayerStats(shots, p2.id)
 
   // Whose turn: pot keeps the shooter's turn, miss/error switches it
   const isP1Turn = shots.length === 0
@@ -579,10 +444,10 @@ export default function GamePage() {
           {game.winner && (
             <button
               onClick={() => {
-                const wStats = getStats(shots, game.winner_id!)
+                const wStats = getPlayerStats(shots, game.winner_id!)
                 const lId = game.player1_id === game.winner_id ? game.player2_id : game.player1_id
                 const loser = game.player1_id === game.winner_id ? game.player2 : game.player1
-                const lStats = getStats(shots, lId)
+                const lStats = getPlayerStats(shots, lId)
                 setTrashTalkLine(pickTrashTalk(game.winner!, loser, wStats, lStats, shots, game.loser_potted_black))
                 setShowTrashTalk(true)
               }}
@@ -988,7 +853,7 @@ export default function GamePage() {
             <p className="font-heading text-xl tracking-wide text-pool-chalk leading-snug">{trashTalkLine}</p>
             <div className="w-full grid grid-cols-2 gap-3 pt-2 border-t border-pool-border">
               {[game.player1, game.player2].map(pl => {
-                const st = getStats(shots, pl.id)
+                const st = getPlayerStats(shots, pl.id)
                 const acc = st.shots > 0 ? Math.round((st.potted / st.shots) * 100) : 0
                 const plStyle = PLAYER_STYLES[pl.username as PlayerUsername]
                 const isWinner = pl.id === game.winner_id
