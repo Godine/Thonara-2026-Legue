@@ -10,6 +10,8 @@ import {
   setGameResult, clearGameResult, deleteSession,
   type SessionFull, type StandingBasic,
 } from '@/lib/queries'
+import { getPlayerStats } from '@/lib/stats'
+import { generateNarrative } from '@/lib/narrative'
 import { GAME_SCHEDULE, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import PlayerBall from '@/components/PlayerBall'
 import type { Game, Player, Shot } from '@/types/database'
@@ -18,36 +20,6 @@ interface QuickResult {
   gameId: string
   winnerId: string
   blackBall: boolean
-}
-
-function generateNarrative(standings: StandingBasic[]): string {
-  if (!standings.length || standings.every(s => s.games_played === 0))
-    return 'No games played yet this season — tonight everything starts.'
-  const sorted = [...standings].sort((a, b) => b.wins - a.wins)
-  const [first, second, third] = sorted
-  const gap12 = first.wins - second.wins
-  const gap23 = second.wins - third.wins
-  if (gap12 === 0)
-    return `${first.display_name} and ${second.display_name} are level at the top. Tonight could split them.`
-  if (gap12 >= 4)
-    return `${first.display_name} is pulling away with ${first.wins} wins. The others need a big night.`
-  if (gap12 === 1 && gap23 === 0)
-    return `${first.display_name} leads by one win. ${second.display_name} and ${third.display_name} are right behind.`
-  if (gap12 === 1)
-    return `${first.display_name} leads by a single win. One bad session and it's level again.`
-  if (gap12 === 2)
-    return `${first.display_name} is two wins clear. ${second.display_name} needs a perfect night to catch up.`
-  return `${first.display_name} leads the table — but ${second.display_name} is right there.`
-}
-
-function computeStats(shots: Shot[], playerId: string) {
-  const mine = shots.filter(s => s.player_id === playerId)
-  return {
-    potted: mine.filter(s => s.potted).length,
-    shots: mine.length,
-    errors: mine.filter(s => s.is_error).length,
-    lucky: mine.filter(s => s.is_lucky).length,
-  }
 }
 
 export default function SessionPage() {
@@ -466,8 +438,8 @@ export default function SessionPage() {
 
       <div className="space-y-3">
         {session.games.map(game => {
-          const p1Stats = computeStats(game.shots, game.player1_id)
-          const p2Stats = computeStats(game.shots, game.player2_id)
+          const p1Stats = getPlayerStats(game.shots, game.player1_id)
+          const p2Stats = getPlayerStats(game.shots, game.player2_id)
           const schedule = GAME_SCHEDULE.find(g => g.gameNumber === game.game_number)
           const p1Style = PLAYER_STYLES[game.player1.username as PlayerUsername]
           const p2Style = PLAYER_STYLES[game.player2.username as PlayerUsername]
@@ -638,7 +610,7 @@ export default function SessionPage() {
         const allShots = completedGames.flatMap(g => g.shots)
         const sessionStats = uniquePlayers.map(player => {
           if (!player) return null
-          const st = computeStats(allShots, player.id)
+          const st = getPlayerStats(allShots, player.id)
           const acc = st.shots > 0 ? Math.round((st.potted / st.shots) * 100) : 0
           return { player, wins: sessionWins[player.id] ?? 0, acc, potted: st.potted, shots: st.shots }
         }).filter(Boolean) as { player: Player; wins: number; acc: number; potted: number; shots: number }[]

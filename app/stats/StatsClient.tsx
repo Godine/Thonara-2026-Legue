@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { PLAYER_STYLES, PLAYERS, type PlayerUsername } from '@/lib/game-config'
 import PlayerBall from '@/components/PlayerBall'
+import { pct, formatTime, longestStreak } from '@/lib/stats'
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -53,24 +54,6 @@ const COLORS: Record<PlayerUsername, string> = {
   godine: '#f87171',
 }
 
-function pct(n: number, d: number) {
-  return d === 0 ? 0 : Math.round((n / d) * 100)
-}
-
-function formatTime(s: number): string {
-  const m = Math.floor(s / 60)
-  const sec = s % 60
-  return `${m}:${sec.toString().padStart(2, '0')}`
-}
-
-function longestStreak(games: RawGame[], playerId: string) {
-  let best = 0, cur = 0
-  for (const g of games) {
-    if (g.winner_id === playerId) { cur++; best = Math.max(best, cur) }
-    else cur = 0
-  }
-  return best
-}
 
 export default function StatsClient({ games, shots }: { games: RawGame[]; shots: RawShot[] }) {
   // ── Compute player stats ─────────────────────────────────────────────────
