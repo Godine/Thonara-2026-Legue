@@ -83,53 +83,49 @@ export default async function Dashboard() {
               return (
                 <div
                   key={player.id}
-                  className="relative bg-pool-surface rounded-2xl border p-4 transition-all"
+                  className="relative bg-pool-surface rounded-xl border px-3 py-2.5 transition-all"
                   style={{
                     borderColor: isLeader ? `${style.color}55` : '#1f3525',
-                    boxShadow:   isLeader ? `0 0 24px ${style.color}12` : undefined,
+                    boxShadow:   isLeader ? `0 0 16px ${style.color}10` : undefined,
                   }}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl w-6 text-center select-none">{RANK_BADGES[i]}</span>
-                    <div style={{ filter: `drop-shadow(0 0 8px ${style.color}44)` }}>
-                      <PlayerAvatar username={player.username as PlayerUsername} size={50} />
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-base w-5 text-center select-none shrink-0">{RANK_BADGES[i]}</span>
+                    <div style={{ filter: `drop-shadow(0 0 6px ${style.color}44)` }}>
+                      <PlayerAvatar username={player.username as PlayerUsername} size={38} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-heading text-lg tracking-wide leading-none" style={{ color: style.color }}>
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-heading text-base tracking-wide leading-none" style={{ color: style.color }}>
                           {player.display_name.toUpperCase()}
                         </p>
                         {isLeader && (
                           <span
-                            className="font-heading text-[9px] tracking-widest px-1.5 py-0.5 rounded-full border shrink-0"
+                            className="font-heading text-[8px] tracking-widest px-1.5 py-0.5 rounded-full border shrink-0"
                             style={{ color: style.color, background: `${style.color}12`, borderColor: `${style.color}33` }}
                           >
                             LEADER
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 mt-2">
-                        <div className="flex-1 h-1.5 bg-pool-border rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full"
-                            style={{ width: `${winRate}%`, backgroundColor: style.color }}
-                          />
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <div className="flex-1 h-1 bg-pool-border rounded-full overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${winRate}%`, backgroundColor: style.color }} />
                         </div>
-                        <span className="font-body text-xs text-pool-chalk-dim shrink-0 tabular-nums">{winRate}%</span>
+                        <span className="font-body text-[11px] text-pool-chalk-dim shrink-0 tabular-nums">{winRate}%</span>
                       </div>
-                      <p className="font-body text-xs text-pool-chalk-dim mt-1">
+                      <p className="font-body text-[11px] text-pool-chalk-dim mt-0.5">
                         {player.wins}W · {player.losses}L · {player.games_played} played
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="font-heading text-5xl leading-none" style={{ color: style.color }}>
+                      <p className="font-heading text-4xl leading-none" style={{ color: style.color }}>
                         {player.wins}
                       </p>
-                      {gap > 0 ? (
-                        <p className="font-heading text-xs text-pool-red mt-0.5">−{gap}</p>
-                      ) : (
-                        <p className="font-body text-xs text-pool-chalk-dim mt-0.5">wins</p>
-                      )}
+                      {gap > 0
+                        ? <p className="font-heading text-xs text-pool-red mt-0.5">−{gap}</p>
+                        : <p className="font-body text-[11px] text-pool-chalk-dim mt-0.5">wins</p>
+                      }
                     </div>
                   </div>
                 </div>
