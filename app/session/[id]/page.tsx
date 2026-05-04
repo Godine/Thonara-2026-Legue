@@ -77,6 +77,12 @@ export default function SessionPage() {
   const [deleting, setDeleting] = useState(false)
   const [standings, setStandings] = useState<Standing[]>([])
   const [showPreview, setShowPreview] = useState(true)
+  const [previewStats, setPreviewStats] = useState<{
+    form: Record<string, boolean[]>
+    streaks: Record<string, number>
+    h2h: { u1: string; u2: string; n1: string; n2: string; w1: number; w2: number }[]
+    lastSession: { date: string; wins: { name: string; count: number }[] } | null
+  } | null>(null)
 
   const fetchSession = useCallback(async () => {
     const { data } = await supabase
@@ -104,6 +110,108 @@ export default function SessionPage() {
   useEffect(() => {
     supabase.from('league_standings').select('username, display_name, wins, losses, games_played')
       .then(({ data }) => { if (data) setStandings(data as Standing[]) })
+
+    // Fetch all completed games to compute form, streaks, H2H, last session
+    supabase.from('games')
+      .select(`id, winner_id, player1_id, player2_id, session_id,
+        player1:players!games_player1_id_fkey(id, username, display_name),
+        player2:players!games_player2_id_fkey(id, username, display_name),
+        winner:players!games_winner_id_fkey(id, username, display_name),
+        session:sessions(id, date)`)
+      .eq('is_complete', true)
+      .order('created_at', { ascending: true })
+      .then(({ data: gamesData }) => {
+        if (!gamesData?.length) return
+        const gs = gamesData as any[]
+
+        // Build id→username map
+        const idToUser: Record<string, string> = {}
+        const idToName: Record<string, string> = {}
+        for (const g of gs) {
+          idToUser[g.player1.id] = g.player1.username
+          idToUser[g.player2.id] = g.player2.username
+          idToName[g.player1.id] = g.player1.display_name
+          idToName[g.player2.id] = g.player2.display_name
+        }
+
+        // Per-player game list (ordered)
+        const byPlayer: Record<string, { winnerId: string; sessionId: string; date: string }[]> = {}
+        for (const g of gs) {
+          for (const pid of [g.player1.id, g.player2.id]) {
+            if (!byPlayer[pid]) byPlayer[pid] = []
+            byPlayer[pid].push({ winnerId: g.winner_id, sessionId: g.session_id, date: g.session.date })
+          }
+        }
+
+        // Form: last 5 results per player (true = win)
+        const form: Record<string, boolean[]> = {}
+        for (const [pid, playerGames] of Object.entries(byPlayer)) {
+          const u = idToUser[pid]
+          if (u) form[u] = playerGames.slice(-5).map(g => g.winnerId === pid)
+        }
+
+        // Current win streak
+        const streaks: Record<string, number> = {}
+        for (const [pid, playerGames] of Object.entries(byPlayer)) {
+          const u = idToUser[pid]
+          if (!u) continue
+          let s = 0
+          for (let i = playerGames.length - 1; i >= 0; i--) {
+            if (playerGames[i].winnerId === pid) s++
+            else break
+          }
+          streaks[u] = s
+        }
+
+        // H2H for all 3 pairs
+        const h2hMap: Record<string, Record<string, number>> = {}
+        for (const g of gs) {
+          if (!g.winner_id) continue
+          const wu = idToUser[g.winner_id]
+          const lu = wu === g.player1.username ? g.player2.username : g.player1.username
+          if (!h2hMap[wu]) h2hMap[wu] = {}
+          h2hMap[wu][lu] = (h2hMap[wu][lu] ?? 0) + 1
+        }
+        const usernames = Array.from(new Set(Object.values(idToUser)))
+        const pairs: { u1: string; u2: string; n1: string; n2: string; w1: number; w2: number }[] = []
+        for (let i = 0; i < usernames.length; i++) {
+          for (let j = i + 1; j < usernames.length; j++) {
+            const u1 = usernames[i], u2 = usernames[j]
+            const p1id = Object.keys(idToUser).find(k => idToUser[k] === u1) ?? ''
+            const p2id = Object.keys(idToUser).find(k => idToUser[k] === u2) ?? ''
+            pairs.push({
+              u1, u2,
+              n1: idToName[p1id] ?? u1,
+              n2: idToName[p2id] ?? u2,
+              w1: h2hMap[u1]?.[u2] ?? 0,
+              w2: h2hMap[u2]?.[u1] ?? 0,
+            })
+          }
+        }
+
+        // Last session (excluding current)
+        const sessionDates: Record<string, string> = {}
+        for (const g of gs) sessionDates[g.session_id] = g.session.date
+        const otherSessions = Object.entries(sessionDates)
+          .filter(([sid]) => sid !== id)
+          .sort(([, a], [, b]) => b.localeCompare(a))
+        let lastSession: { date: string; wins: { name: string; count: number }[] } | null = null
+        if (otherSessions.length > 0) {
+          const [lastSid, lastDate] = otherSessions[0]
+          const lastGames = gs.filter(g => g.session_id === lastSid && g.winner_id)
+          const winCount: Record<string, number> = {}
+          for (const g of lastGames) {
+            const n = idToName[g.winner_id]
+            if (n) winCount[n] = (winCount[n] ?? 0) + 1
+          }
+          lastSession = {
+            date: lastDate,
+            wins: Object.entries(winCount).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count })),
+          }
+        }
+
+        setPreviewStats({ form, streaks, h2h: pairs, lastSession })
+      })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -237,6 +345,97 @@ export default function SessionPage() {
             {generateNarrative(standings)}
           </p>
         </div>
+
+        {/* Stats: Form, Streaks, H2H, Last session */}
+        {previewStats && (
+          <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden mb-4">
+            <div className="px-4 py-3 border-b border-pool-border">
+              <p className="font-heading text-xs tracking-widest text-pool-chalk-dim">GOING IN…</p>
+            </div>
+
+            {/* Form + streaks per player */}
+            <div className="divide-y divide-pool-border">
+              {sortedStandings.map(s => {
+                const style = PLAYER_STYLES[s.username as PlayerUsername]
+                const form = previewStats.form[s.username] ?? []
+                const streak = previewStats.streaks[s.username] ?? 0
+                return (
+                  <div key={s.username} className="flex items-center gap-3 px-4 py-3">
+                    {style && <PlayerBall number={style.number} color={style.color} size={26} />}
+                    <span className="font-heading text-sm tracking-wide w-16" style={{ color: style?.color }}>
+                      {s.display_name.toUpperCase()}
+                    </span>
+                    <div className="flex gap-1 flex-1">
+                      {form.map((win, j) => (
+                        <span key={j} className="text-xs" style={{ color: win ? (style?.color ?? '#22c55e') : '#2e3a2b' }}>●</span>
+                      ))}
+                      {form.length === 0 && <span className="text-xs text-pool-chalk-dim">no games yet</span>}
+                    </div>
+                    {streak >= 2 && (
+                      <span className="font-body text-xs text-pool-gold shrink-0">🔥 {streak} streak</span>
+                    )}
+                    {streak === 1 && (
+                      <span className="font-body text-xs text-pool-chalk-dim shrink-0">W last</span>
+                    )}
+                    {streak === 0 && form.length > 0 && (
+                      <span className="font-body text-xs text-pool-chalk-dim shrink-0">L last</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* H2H */}
+            {previewStats.h2h.some(p => p.w1 + p.w2 > 0) && (
+              <div className="px-4 py-3 border-t border-pool-border space-y-2.5">
+                <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-2">HEAD TO HEAD</p>
+                {previewStats.h2h.map(pair => {
+                  const total = pair.w1 + pair.w2
+                  if (total === 0) return null
+                  const s1 = PLAYER_STYLES[pair.u1 as PlayerUsername]
+                  const s2 = PLAYER_STYLES[pair.u2 as PlayerUsername]
+                  const pct1 = Math.round((pair.w1 / total) * 100)
+                  return (
+                    <div key={`${pair.u1}-${pair.u2}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-heading text-xs tracking-wide" style={{ color: s1?.color }}>{pair.n1}</span>
+                        <span className="font-heading text-sm text-pool-chalk tabular-nums">{pair.w1}–{pair.w2}</span>
+                        <span className="font-heading text-xs tracking-wide" style={{ color: s2?.color }}>{pair.n2}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden bg-pool-border flex">
+                        <div className="h-full transition-all" style={{ width: `${pct1}%`, backgroundColor: s1?.color }} />
+                        <div className="h-full flex-1" style={{ backgroundColor: s2?.color }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Last session result */}
+            {previewStats.lastSession && previewStats.lastSession.wins.length > 0 && (
+              <div className="px-4 py-3 border-t border-pool-border flex items-center gap-3">
+                <span className="text-lg">📅</span>
+                <div className="flex-1">
+                  <p className="font-body text-xs text-pool-chalk-dim">
+                    Last session · {format(new Date(previewStats.lastSession.date + 'T12:00:00'), 'MMM d')}
+                  </p>
+                  <p className="font-body text-sm text-pool-chalk mt-0.5">
+                    {previewStats.lastSession.wins.map((w, i) => (
+                      <span key={w.name}>
+                        {i > 0 && <span className="text-pool-chalk-dim"> · </span>}
+                        <span style={{ color: PLAYER_STYLES[standings.find(s => s.display_name === w.name)?.username as PlayerUsername]?.color }}>
+                          {w.name}
+                        </span>
+                        {' '}<span className="text-pool-chalk-dim">{w.count}W</span>
+                      </span>
+                    ))}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tonight's schedule */}
         <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden mb-6">
