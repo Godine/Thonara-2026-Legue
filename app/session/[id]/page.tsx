@@ -26,6 +26,34 @@ interface QuickResult {
   blackBall: boolean
 }
 
+interface Standing {
+  username: string
+  display_name: string
+  wins: number
+  losses: number
+  games_played: number
+}
+
+function generateNarrative(standings: Standing[]): string {
+  if (!standings.length || standings.every(s => s.games_played === 0))
+    return 'No games played yet this season — tonight everything starts.'
+  const sorted = [...standings].sort((a, b) => b.wins - a.wins)
+  const [first, second, third] = sorted
+  const gap12 = first.wins - second.wins
+  const gap23 = second.wins - third.wins
+  if (gap12 === 0)
+    return `${first.display_name} and ${second.display_name} are level at the top. Tonight could split them.`
+  if (gap12 >= 4)
+    return `${first.display_name} is pulling away with ${first.wins} wins. The others need a big night.`
+  if (gap12 === 1 && gap23 === 0)
+    return `${first.display_name} leads by one win. ${second.display_name} and ${third.display_name} are right behind.`
+  if (gap12 === 1)
+    return `${first.display_name} leads by a single win. One bad session and it's level again.`
+  if (gap12 === 2)
+    return `${first.display_name} is two wins clear. ${second.display_name} needs a perfect night to catch up.`
+  return `${first.display_name} leads the table — but ${second.display_name} is right there.`
+}
+
 function computeStats(shots: Shot[], playerId: string) {
   const mine = shots.filter(s => s.player_id === playerId)
   return {
@@ -47,6 +75,8 @@ export default function SessionPage() {
   const [quickSaving, setQuickSaving] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [standings, setStandings] = useState<Standing[]>([])
+  const [showPreview, setShowPreview] = useState(true)
 
   const fetchSession = useCallback(async () => {
     const { data } = await supabase
@@ -70,6 +100,11 @@ export default function SessionPage() {
     }
     setLoading(false)
   }, [id])
+
+  useEffect(() => {
+    supabase.from('league_standings').select('username, display_name, wins, losses, games_played')
+      .then(({ data }) => { if (data) setStandings(data as Standing[]) })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchSession()
@@ -144,6 +179,113 @@ export default function SessionPage() {
   const uniquePlayers = session.games
     .flatMap(g => [g.player1, g.player2])
     .filter((p, i, arr) => p && arr.findIndex(x => x?.id === p?.id) === i)
+
+  // Pre-session hype card — show when no games played yet
+  const sortedStandings = [...standings].sort((a, b) => b.wins - a.wins)
+  if (showPreview && completedGames.length === 0) {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-6 animate-fade-in flex flex-col min-h-[80vh]">
+        {/* Skip */}
+        <div className="flex items-center justify-between mb-6">
+          <Link href="/" className="text-pool-chalk-dim text-sm font-body hover:text-pool-gold transition-colors">← Home</Link>
+          <button onClick={() => setShowPreview(false)}
+            className="text-pool-chalk-dim text-xs font-body hover:text-pool-chalk transition-colors">
+            skip →
+          </button>
+        </div>
+
+        {/* Tonight heading */}
+        <div className="text-center mb-8">
+          <p className="font-body text-xs tracking-[0.3em] uppercase text-pool-chalk-dim mb-1">
+            {format(new Date(session.date + 'T12:00:00'), 'EEEE, MMMM d')}
+          </p>
+          <h1 className="font-heading text-7xl tracking-widest leading-none text-pool-chalk">TONIGHT</h1>
+          <div className="mt-3 h-px bg-gradient-to-r from-transparent via-pool-gold/50 to-transparent" />
+        </div>
+
+        {/* Standings */}
+        {sortedStandings.length > 0 && (
+          <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden mb-4">
+            <div className="px-4 py-3 border-b border-pool-border">
+              <p className="font-heading text-xs tracking-widest text-pool-chalk-dim">THE TABLE</p>
+            </div>
+            <div className="divide-y divide-pool-border">
+              {sortedStandings.map((s, i) => {
+                const style = PLAYER_STYLES[s.username as PlayerUsername]
+                const badges = ['🥇', '🥈', '🥉']
+                return (
+                  <div key={s.username} className="flex items-center gap-3 px-4 py-3">
+                    <span className="text-lg w-7 text-center">{badges[i] ?? String(i + 1)}</span>
+                    {style && <PlayerBall number={style.number} color={style.color} size={34} />}
+                    <p className="font-heading text-xl tracking-wide flex-1" style={{ color: style?.color }}>
+                      {s.display_name.toUpperCase()}
+                    </p>
+                    <div className="text-right">
+                      <p className="font-heading text-3xl text-pool-gold leading-none">{s.wins}</p>
+                      <p className="font-body text-xs text-pool-chalk-dim">{s.losses}L</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Narrative */}
+        <div className="bg-pool-gold/10 border border-pool-gold/30 rounded-2xl px-5 py-4 mb-4 text-center">
+          <p className="font-heading text-lg tracking-wide text-pool-chalk leading-snug">
+            {generateNarrative(standings)}
+          </p>
+        </div>
+
+        {/* Tonight's schedule */}
+        <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden mb-6">
+          <div className="px-4 py-3 border-b border-pool-border">
+            <p className="font-heading text-xs tracking-widest text-pool-chalk-dim">TONIGHT'S GAMES</p>
+          </div>
+          <div className="divide-y divide-pool-border">
+            {session.games.map(g => {
+              const p1Style = PLAYER_STYLES[g.player1.username as PlayerUsername]
+              const p2Style = PLAYER_STYLES[g.player2.username as PlayerUsername]
+              const schedule = GAME_SCHEDULE.find(s => s.gameNumber === g.game_number)
+              const scorerStyle = schedule ? PLAYER_STYLES[schedule.scorer as PlayerUsername] : null
+              return (
+                <div key={g.id} className="flex items-center gap-2 px-4 py-2.5">
+                  <span className="font-body text-xs text-pool-chalk-dim w-5">{g.game_number}</span>
+                  <div className="flex items-center gap-1.5 flex-1">
+                    {p1Style && <PlayerBall number={p1Style.number} color={p1Style.color} size={20} />}
+                    <span className="font-heading text-sm tracking-wide" style={{ color: p1Style?.color }}>
+                      {g.player1.display_name.toUpperCase()}
+                    </span>
+                  </div>
+                  <span className="font-body text-xs text-pool-chalk-dim">vs</span>
+                  <div className="flex items-center gap-1.5 flex-1 justify-end">
+                    <span className="font-heading text-sm tracking-wide" style={{ color: p2Style?.color }}>
+                      {g.player2.display_name.toUpperCase()}
+                    </span>
+                    {p2Style && <PlayerBall number={p2Style.number} color={p2Style.color} size={20} />}
+                  </div>
+                  {scorerStyle && (
+                    <span className="font-body text-xs text-pool-chalk-dim w-14 text-right shrink-0">
+                      {scorerStyle.label} scores
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* CTA */}
+        <button
+          onClick={() => setShowPreview(false)}
+          className="w-full bg-pool-gold hover:bg-pool-gold-light text-pool-bg font-heading text-2xl tracking-widest py-5 rounded-2xl transition-all active:scale-[0.98] glow-gold mt-auto"
+        >
+          ▶ LET'S PLAY
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-lg mx-auto px-4 py-6 animate-fade-in">
