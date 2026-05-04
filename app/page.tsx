@@ -89,27 +89,25 @@ export default async function Dashboard() {
                     boxShadow:   isLeader ? `0 0 24px ${style.color}12` : undefined,
                   }}
                 >
-                  {/* Leader badge */}
-                  {isLeader && (
-                    <div className="absolute top-3.5 right-3.5">
-                      <span
-                        className="font-heading text-[10px] tracking-widest px-2 py-0.5 rounded-full border"
-                        style={{ color: style.color, background: `${style.color}12`, borderColor: `${style.color}33` }}
-                      >
-                        LEADER
-                      </span>
-                    </div>
-                  )}
-
                   <div className="flex items-center gap-3">
                     <span className="text-xl w-6 text-center select-none">{RANK_BADGES[i]}</span>
                     <div style={{ filter: `drop-shadow(0 0 8px ${style.color}44)` }}>
                       <PlayerAvatar username={player.username as PlayerUsername} size={50} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-heading text-lg tracking-wide leading-none" style={{ color: style.color }}>
-                        {player.display_name.toUpperCase()}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-heading text-lg tracking-wide leading-none" style={{ color: style.color }}>
+                          {player.display_name.toUpperCase()}
+                        </p>
+                        {isLeader && (
+                          <span
+                            className="font-heading text-[9px] tracking-widest px-1.5 py-0.5 rounded-full border shrink-0"
+                            style={{ color: style.color, background: `${style.color}12`, borderColor: `${style.color}33` }}
+                          >
+                            LEADER
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 mt-2">
                         <div className="flex-1 h-1.5 bg-pool-border rounded-full overflow-hidden">
                           <div
