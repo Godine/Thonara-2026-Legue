@@ -4,18 +4,20 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import {
+  fetchGame, fetchShotsForGame, fetchHistoricalShots, fetchH2H,
+  setGameResult, clearGameResult, resetGame,
+  insertShot, insertShots, deleteShot,
+  type GameWithPlayers,
+} from '@/lib/queries'
 import { GAME_SCHEDULE, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import { getStoredPlayer } from '@/components/PlayerGate'
 import PlayerBall from '@/components/PlayerBall'
 import PoolTableAnimation from '@/components/PoolTableAnimation'
 import WinCelebration from '@/components/WinCelebration'
-import type { Game, Player, Shot } from '@/types/database'
+import type { Player, Shot } from '@/types/database'
 
-interface GameFull extends Game {
-  player1: Player
-  player2: Player
-  winner: Player | null
-}
+type GameFull = GameWithPlayers
 
 interface PlayerStats {
   shots: number
@@ -166,7 +168,7 @@ interface EndGameState {
 export default function GamePage() {
   const { id: sessionId, gameId } = useParams<{ id: string; gameId: string }>()
   const router = useRouter()
-  const supabase = createClient()
+  const db = createClient()
 
   const [game, setGame]                 = useState<GameFull | null>(null)
   const [shots, setShots]               = useState<Shot[]>([])
@@ -191,34 +193,26 @@ export default function GamePage() {
   const prevCompleteRef = useRef<boolean | undefined>(undefined)
   const timerStartRef   = useRef<number | null>(null)
 
-  const fetchGame = useCallback(async () => {
-    const [{ data: gameData }, { data: shotsData }] = await Promise.all([
-      supabase
-        .from('games')
-        .select(`*, player1:players!games_player1_id_fkey(*), player2:players!games_player2_id_fkey(*), winner:players!games_winner_id_fkey(*)`)
-        .eq('id', gameId)
-        .single(),
-      supabase
-        .from('shots')
-        .select('*')
-        .eq('game_id', gameId)
-        .order('shot_number', { ascending: true }),
+  const loadGame = useCallback(async () => {
+    const [gameData, shotsData] = await Promise.all([
+      fetchGame(db, gameId),
+      fetchShotsForGame(db, gameId),
     ])
-    if (gameData) setGame(gameData as GameFull)
-    if (shotsData) setShots(shotsData as Shot[])
+    if (gameData) setGame(gameData)
+    setShots(shotsData)
     setLoading(false)
   }, [gameId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setCurrentUsername(getStoredPlayer())
-    fetchGame()
-    const channel = supabase
+    loadGame()
+    const channel = db
       .channel(`game-shots-${gameId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'shots', filter: `game_id=eq.${gameId}` }, fetchGame)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` }, fetchGame)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shots', filter: `game_id=eq.${gameId}` }, loadGame)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` }, loadGame)
       .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [gameId, fetchGame]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { db.removeChannel(channel) }
+  }, [gameId, loadGame]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch historical shot accuracy + H2H in parallel (once per game/players combo)
   useEffect(() => {
@@ -226,39 +220,17 @@ export default function GamePage() {
     const p1id = game.player1.id
     const p2id = game.player2.id
     Promise.all([
-      supabase
-        .from('shots')
-        .select('player_id, potted')
-        .in('player_id', [p1id, p2id])
-        .neq('game_id', gameId),
-      supabase
-        .from('games')
-        .select('winner_id, player1_id, player2_id')
-        .in('player1_id', [p1id, p2id])
-        .in('player2_id', [p1id, p2id])
-        .eq('is_complete', true)
-        .neq('id', gameId),
-    ]).then(([{ data: shotsData }, { data: gamesData }]) => {
-      if (shotsData) {
-        const acc: Record<string, { shots: number; potted: number }> = {}
-        for (const s of shotsData as { player_id: string; potted: boolean }[]) {
-          if (!acc[s.player_id]) acc[s.player_id] = { shots: 0, potted: 0 }
-          acc[s.player_id].shots++
-          if (s.potted) acc[s.player_id].potted++
-        }
-        setHistStats(acc)
+      fetchHistoricalShots(db, [p1id, p2id], gameId),
+      fetchH2H(db, p1id, p2id, gameId),
+    ]).then(([shotsData, h2h]) => {
+      const acc: Record<string, { shots: number; potted: number }> = {}
+      for (const s of shotsData) {
+        if (!acc[s.player_id]) acc[s.player_id] = { shots: 0, potted: 0 }
+        acc[s.player_id].shots++
+        if (s.potted) acc[s.player_id].potted++
       }
-      if (gamesData) {
-        let p1Wins = 0, p2Wins = 0
-        for (const g of gamesData as { winner_id: string; player1_id: string; player2_id: string }[]) {
-          const isMatchup = (g.player1_id === p1id && g.player2_id === p2id)
-            || (g.player1_id === p2id && g.player2_id === p1id)
-          if (!isMatchup) continue
-          if (g.winner_id === p1id) p1Wins++
-          else if (g.winner_id === p2id) p2Wins++
-        }
-        setH2hStats({ p1Wins, p2Wins })
-      }
+      setHistStats(acc)
+      setH2hStats(h2h)
     })
   }, [game?.player1.id, game?.player2.id, gameId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -306,7 +278,7 @@ export default function GamePage() {
       created_at: new Date().toISOString(),
     }
     setShots(prev => [...prev, optimistic])
-    await supabase.from('shots').insert({
+    await insertShot(db, {
       game_id: gameId,
       player_id: playerId,
       potted: optimistic.potted,
@@ -327,18 +299,12 @@ export default function GamePage() {
           potted: true, is_lucky: false, is_error: false, shot_number: i + 1,
         }))
     const now = Date.now()
-    const optimistic: Shot[] = rows.map((r, i) => ({
+    setShots(rows.map((r, i) => ({
       id: `temp-${now}-${i}`,
-      game_id: r.game_id,
-      player_id: r.player_id,
-      potted: r.potted,
-      is_lucky: r.is_lucky,
-      is_error: r.is_error,
-      shot_number: r.shot_number,
       created_at: new Date().toISOString(),
-    }))
-    setShots(optimistic)
-    await supabase.from('shots').insert(rows)
+      ...r,
+    })))
+    await insertShots(db, rows)
     setSaving(false)
     setBreaker(null)
     setBreakPots(0)
@@ -349,62 +315,45 @@ export default function GamePage() {
     const lastShot = shots[shots.length - 1]
     setShots(prev => prev.filter(s => s.id !== lastShot.id))
     setSaving(true)
-    await supabase.from('shots').delete().eq('id', lastShot.id)
+    await deleteShot(db, lastShot.id)
     setSaving(false)
   }
 
   const adminChangeWinner = async () => {
     if (!adminWinnerId || saving) return
     setSaving(true)
-    await supabase.from('games').update({
-      winner_id: adminWinnerId,
-      loser_potted_black: adminBlackBall,
-      is_complete: true,
-    }).eq('id', gameId)
+    await setGameResult(db, gameId, adminWinnerId, adminBlackBall)
     setSaving(false)
     setAdminPanel(false)
-    await fetchGame()
+    await loadGame()
   }
 
   const adminReopenGame = async () => {
     setSaving(true)
-    await supabase.from('games').update({
-      winner_id: null,
-      is_complete: false,
-      loser_potted_black: false,
-    }).eq('id', gameId)
+    await clearGameResult(db, gameId)
     setSaving(false)
     setAdminPanel(false)
-    await fetchGame()
+    await loadGame()
   }
 
   const adminDeleteShot = async (shotId: string) => {
     setShots(prev => prev.filter(s => s.id !== shotId))
-    await supabase.from('shots').delete().eq('id', shotId)
+    await deleteShot(db, shotId)
   }
 
   const adminResetGame = async () => {
     setSaving(true)
-    await supabase.from('shots').delete().eq('game_id', gameId)
-    await supabase.from('games').update({
-      winner_id: null,
-      is_complete: false,
-      loser_potted_black: false,
-    }).eq('id', gameId)
+    await resetGame(db, gameId)
     setShots([])
     setSaving(false)
     setAdminPanel(false)
-    await fetchGame()
+    await loadGame()
   }
 
   const confirmEndGame = async () => {
     if (!endGame.winnerId || saving) return
     setSaving(true)
-    await supabase.from('games').update({
-      winner_id: endGame.winnerId,
-      loser_potted_black: endGame.blackBall,
-      is_complete: true,
-    }).eq('id', gameId)
+    await setGameResult(db, gameId, endGame.winnerId, endGame.blackBall)
     setSaving(false)
     setEndGame(e => ({ ...e, open: false }))
   }

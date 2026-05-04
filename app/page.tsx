@@ -1,41 +1,18 @@
 import { createClient } from '@/lib/supabase/server'
+import { fetchStandings, fetchRecentSession } from '@/lib/queries'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import PlayerAvatar from '@/components/PlayerAvatar'
 import { PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
-import type { LeagueStanding, Session, Game, Player } from '@/types/database'
-
-async function getStandings(): Promise<LeagueStanding[]> {
-  const supabase = createClient()
-  const { data } = await supabase
-    .from('league_standings')
-    .select('*')
-  return (data as LeagueStanding[]) ?? []
-}
-
-async function getRecentSession() {
-  const supabase = createClient()
-  const { data } = await supabase
-    .from('sessions')
-    .select(`
-      *,
-      games (
-        id, game_number, is_complete, winner_id,
-        player1:players!games_player1_id_fkey ( id, display_name, username ),
-        player2:players!games_player2_id_fkey ( id, display_name, username ),
-        winner:players!games_winner_id_fkey  ( id, display_name, username )
-      )
-    `)
-    .order('date', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  return data
-}
 
 const RANK_BADGES = ['🥇', '🥈', '🥉']
 
 export default async function Dashboard() {
-  const [standings, recent] = await Promise.all([getStandings(), getRecentSession()])
+  const db = createClient()
+  const [standings, recent] = await Promise.all([
+    fetchStandings(db),
+    fetchRecentSession(db),
+  ])
 
   const sorted = [...standings].sort((a, b) => b.wins - a.wins)
 

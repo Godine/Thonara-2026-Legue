@@ -1,55 +1,26 @@
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllSessions } from '@/lib/queries'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import PlayerBall from '@/components/PlayerBall'
 import { PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
-import type { Session, Game, Player, Shot } from '@/types/database'
-
-interface GameFull extends Game {
-  player1: Player
-  player2: Player
-  winner: Player | null
-  shots: Shot[]
-}
-
-interface SessionFull extends Session {
-  games: GameFull[]
-}
+import type { Player, Shot } from '@/types/database'
 
 function bankPct(shots: Shot[], playerId: string): string {
   const mine = shots.filter(s => s.player_id === playerId)
   if (mine.length === 0) return '—'
-  const potted = mine.filter(s => s.potted).length
-  return `${Math.round((potted / mine.length) * 100)}%`
+  return `${Math.round((mine.filter(s => s.potted).length / mine.length) * 100)}%`
 }
 
 function errorPct(shots: Shot[], playerId: string): string {
   const mine = shots.filter(s => s.player_id === playerId)
   if (mine.length === 0) return '—'
-  const errors = mine.filter(s => s.is_error).length
-  return `${Math.round((errors / mine.length) * 100)}%`
+  return `${Math.round((mine.filter(s => s.is_error).length / mine.length) * 100)}%`
 }
 
 export default async function HistoryPage() {
-  const supabase = createClient()
-  const { data } = await supabase
-    .from('sessions')
-    .select(`
-      *,
-      games (
-        *,
-        player1:players!games_player1_id_fkey (*),
-        player2:players!games_player2_id_fkey (*),
-        winner:players!games_winner_id_fkey  (*),
-        shots (*)
-      )
-    `)
-    .order('date', { ascending: false })
-    .limit(20)
+  const sessions = await fetchAllSessions(createClient())
 
-  const sessions = (data as SessionFull[]) ?? []
-
-  // Collect all unique players across sessions
   const allPlayers: Record<string, Player> = {}
   for (const s of sessions) {
     for (const g of s.games) {
@@ -60,7 +31,6 @@ export default async function HistoryPage() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-6 animate-fade-in">
-      {/* Header */}
       <div className="mb-5">
         <Link href="/" className="text-pool-chalk-dim text-sm font-body hover:text-pool-gold transition-colors">
           ← Home
@@ -86,23 +56,19 @@ export default async function HistoryPage() {
             const sortedGames = [...session.games].sort((a, b) => a.game_number - b.game_number)
             const completedGames = sortedGames.filter(g => g.is_complete)
 
-            // Session-level wins per player
             const wins: Record<string, number> = {}
             for (const g of completedGames) {
               if (g.winner_id) wins[g.winner_id] = (wins[g.winner_id] ?? 0) + 1
             }
 
-            // All shots in session, by player
             const allShots = sortedGames.flatMap(g => g.shots)
 
-            // Get unique players in this session
             const sessionPlayers = Object.values(allPlayers).filter(p =>
               sortedGames.some(g => g.player1_id === p.id || g.player2_id === p.id)
             )
 
             return (
               <div key={session.id} className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
-                {/* Session header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-pool-border">
                   <div>
                     <p className="font-heading text-lg tracking-wider text-pool-chalk">
@@ -120,7 +86,6 @@ export default async function HistoryPage() {
                   </Link>
                 </div>
 
-                {/* Results table */}
                 <div className="px-4 py-3">
                   <div className="grid grid-cols-3 gap-2 mb-2">
                     {['Player', 'W', 'Bank%'].map(h => (
@@ -134,16 +99,13 @@ export default async function HistoryPage() {
                     const w = wins[player.id] ?? 0
                     return (
                       <div key={player.id} className="grid grid-cols-3 gap-2 py-1.5 border-t border-pool-border/50">
-                        {/* Player */}
                         <div className="flex items-center gap-2">
                           {style && <PlayerBall number={style.number} color={style.color} size={22} />}
                           <span className="font-body text-sm text-pool-chalk">{player.display_name}</span>
                         </div>
-                        {/* Wins */}
                         <p className={`font-heading text-xl text-center ${w > 0 ? 'text-pool-gold' : 'text-pool-chalk-dim'}`}>
                           {w}
                         </p>
-                        {/* Bank % */}
                         <p className="font-body text-sm text-pool-chalk-dim text-center">
                           {bankPct(allShots, player.id)}
                         </p>
@@ -152,16 +114,12 @@ export default async function HistoryPage() {
                   })}
                 </div>
 
-                {/* Game results row */}
                 {completedGames.length > 0 && (
                   <div className="border-t border-pool-border px-4 py-2">
                     <div className="flex gap-2 flex-wrap">
                       {sortedGames.map(game => {
                         const p1Style = PLAYER_STYLES[game.player1.username as PlayerUsername]
                         const p2Style = PLAYER_STYLES[game.player2.username as PlayerUsername]
-                        const winnerStyle = game.winner
-                          ? PLAYER_STYLES[game.winner.username as PlayerUsername]
-                          : null
                         return (
                           <div
                             key={game.id}
@@ -178,7 +136,6 @@ export default async function HistoryPage() {
                   </div>
                 )}
 
-                {/* Error/Lucky stats */}
                 {allShots.length > 0 && (
                   <div className="border-t border-pool-border px-4 py-2">
                     <p className="text-xs font-body tracking-widest text-pool-chalk-dim mb-2">ACCURACY</p>

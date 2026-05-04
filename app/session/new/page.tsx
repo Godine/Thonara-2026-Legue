@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { format, isPast, isToday, parseISO } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
+import { findSessionByDate, createSession } from '@/lib/queries'
 import { GAME_SCHEDULE, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import PlayerBall from '@/components/PlayerBall'
 
@@ -12,79 +13,28 @@ export default function NewSessionPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
-  const supabase = createClient()
 
   const isPastDate = !isToday(parseISO(date)) && isPast(parseISO(date))
 
-  const createSession = async () => {
+  const handleCreate = async () => {
     setError('')
     setLoading(true)
+    const db = createClient()
 
-    const { data: existing } = await supabase
-      .from('sessions')
-      .select('id')
-      .eq('date', date)
-      .maybeSingle()
-
+    const existing = await findSessionByDate(db, date)
     if (existing) {
       router.push(`/session/${existing.id}`)
       return
     }
 
-    const { data: players, error: playerErr } = await supabase
-      .from('players')
-      .select('id, username')
-
-    if (playerErr) {
-      setError(`Database error: "${playerErr.message}" — check your Supabase URL and anon key in Vercel environment variables.`)
-      setLoading(false)
-      return
-    }
-    if (!players?.length) {
-      setError('Players table is empty — run the setup SQL in Supabase SQL Editor.')
+    const result = await createSession(db, date)
+    if (!result.ok) {
+      setError(result.error)
       setLoading(false)
       return
     }
 
-    const byUsername = Object.fromEntries(players.map(p => [p.username, p.id]))
-    const missingPlayers = GAME_SCHEDULE.flatMap(g => [g.player1, g.player2, g.scorer])
-      .filter((u, i, arr) => arr.indexOf(u) === i)
-      .filter(u => !byUsername[u])
-
-    if (missingPlayers.length > 0) {
-      setError(`Missing players in database: ${missingPlayers.join(', ')}. Run the setup SQL again.`)
-      setLoading(false)
-      return
-    }
-
-    const { data: session, error: sessionErr } = await supabase
-      .from('sessions')
-      .insert({ date })
-      .select('id')
-      .single()
-
-    if (sessionErr || !session) {
-      setError('Failed to create session.')
-      setLoading(false)
-      return
-    }
-
-    const games = GAME_SCHEDULE.map(g => ({
-      session_id: session.id,
-      game_number: g.gameNumber,
-      player1_id: byUsername[g.player1],
-      player2_id: byUsername[g.player2],
-    }))
-
-    const { error: gamesErr } = await supabase.from('games').insert(games)
-
-    if (gamesErr) {
-      setError('Failed to create games.')
-      setLoading(false)
-      return
-    }
-
-    router.push(`/session/${session.id}`)
+    router.push(`/session/${result.id}`)
   }
 
   return (
@@ -95,7 +45,6 @@ export default function NewSessionPage() {
         <div className="mt-2 h-px bg-gradient-to-r from-pool-gold/40 to-transparent" />
       </div>
 
-      {/* Date picker — prominent */}
       <div className="bg-pool-surface rounded-2xl border border-pool-gold/20 p-5 mb-2 overflow-hidden">
         <label className="block text-xs font-body tracking-widest uppercase text-pool-gold mb-3">
           📅 Session date
@@ -119,7 +68,6 @@ export default function NewSessionPage() {
         </div>
       )}
 
-      {/* Game lineup */}
       <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden mb-5">
         <div className="px-4 py-3 border-b border-pool-border">
           <p className="font-heading text-base tracking-widest text-pool-chalk-dim">GAME LINEUP</p>
@@ -159,7 +107,7 @@ export default function NewSessionPage() {
       )}
 
       <button
-        onClick={createSession}
+        onClick={handleCreate}
         disabled={loading}
         className="w-full bg-pool-gold hover:bg-pool-gold-light disabled:opacity-50 text-pool-bg font-heading text-2xl tracking-widest py-5 rounded-2xl transition-all active:scale-[0.98] glow-gold"
       >
