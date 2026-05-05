@@ -346,7 +346,7 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
                 <p className="font-body text-xs mt-0.5" style={{ color: style.color }}>
                   {eloRatings[p.username]} ELO
                 </p>
-                {currentStreaks[p.username] > 0 && (
+                {currentStreaks[p.username] > 1 && (
                   <p className="font-heading text-xs text-pool-gold mt-0.5">🔥 {currentStreaks[p.username]}</p>
                 )}
                 <div
@@ -511,11 +511,13 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  {currentStreaks[p.username] > 0
+                  {currentStreaks[p.username] > 1
                     ? <p className="font-heading text-base text-pool-gold">🔥 {currentStreaks[p.username]}</p>
                     : <p className="font-body text-sm text-pool-chalk-dim">—</p>
                   }
-                  <p className="font-body text-xs text-pool-chalk-dim">Best: {longestStreaks[p.username]}</p>
+                  <p className="font-body text-xs text-pool-chalk-dim">
+                    {longestStreaks[p.username] > 1 ? `Best: ${longestStreaks[p.username]}` : '—'}
+                  </p>
                 </div>
               </div>
             )
@@ -535,7 +537,7 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
             <RecordCard icon="💥" label="Most Pots" username={mostPotsPlayer}
               value={recordPots[mostPotsPlayer].toString()} sub="in a single game" />
           )}
-          {bestStreak.streak > 0 && (
+          {bestStreak.streak > 1 && (
             <RecordCard icon="🔥" label="Win Streak" username={bestStreak.username}
               value={`${bestStreak.streak} in a row`} sub="all-time best" />
           )}
