@@ -124,6 +124,10 @@ export default function GamePage() {
     return () => clearInterval(id)
   }, [timerStarted, game?.is_complete])
 
+  const haptic = (pattern: number | number[]) => {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(pattern)
+  }
+
   const canEdit = !!currentUsername && !game?.is_complete
 
   const recordShot = async (playerId: string, type: ShotType) => {
@@ -131,6 +135,13 @@ export default function GamePage() {
     setSaving(true)
     setFlash({ playerId, type })
     setTimeout(() => setFlash(null), 350)
+    const hapticPatterns: Record<ShotType, number | number[]> = {
+      potted: 40,
+      lucky:  [10, 5, 10, 5, 10],
+      miss:   15,
+      error:  [20, 10, 20],
+    }
+    haptic(hapticPatterns[type])
     const newShotNumber = shots.length + 1
     const optimistic: Shot = {
       id: `temp-${Date.now()}`,
@@ -170,6 +181,7 @@ export default function GamePage() {
       ...r,
     })))
     await insertShots(db, rows)
+    haptic(breakPots > 0 ? [30, 15, 30] : 20)
     setSaving(false)
     setBreaker(null)
     setBreakPots(0)
@@ -219,6 +231,7 @@ export default function GamePage() {
     if (!endGame.winnerId || saving) return
     setSaving(true)
     await setGameResult(db, gameId, endGame.winnerId, endGame.blackBall)
+    haptic([80, 40, 80, 40, 150])
     setSaving(false)
     setEndGame(e => ({ ...e, open: false }))
   }
