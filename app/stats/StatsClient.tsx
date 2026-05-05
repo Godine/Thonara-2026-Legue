@@ -54,7 +54,15 @@ const COLORS: Record<PlayerUsername, string> = {
   godine: '#f87171',
 }
 
-export default function StatsClient({ games, shots }: { games: RawGame[]; shots: RawShot[] }) {
+export default function StatsClient({ games: _games, shots }: { games: RawGame[]; shots: RawShot[] }) {
+  // Sort chronologically — all 6 games in a session share the same created_at,
+  // so ordering by that field leaves intra-session order undefined and breaks streaks.
+  const games = [..._games].sort((a, b) => {
+    const da = a.session?.date ?? ''
+    const db = b.session?.date ?? ''
+    return da !== db ? da.localeCompare(db) : a.game_number - b.game_number
+  })
+
   // ── Compute player stats ────────────────────────────────────────────────
 
   const playerMap: Record<string, PlayerStat> = {}
