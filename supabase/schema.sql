@@ -5,7 +5,7 @@
 
 -- ── PLAYERS ──────────────────────────────────────────────────
 -- Linked to Supabase auth.users. Pre-create accounts via Auth dashboard:
---   adib@thonara.app  /  shin@thonara.app  /  godine@thonara.app
+--   adib@thonara.app  /  shin@thonara.app  /  amine@thonara.app
 -- Then run the INSERT below to seed the players table.
 
 CREATE TABLE IF NOT EXISTS public.players (
@@ -157,14 +157,14 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.sessions;
 -- STEP 1: In Supabase Dashboard → Auth → Users, manually create:
 --   Email: adib@thonara.app    Password: [choose one]
 --   Email: shin@thonara.app    Password: [choose one]
---   Email: godine@thonara.app  Password: [choose one]
+--   Email: amine@thonara.app  Password: [choose one]
 --
 -- STEP 2: Copy their user IDs from the Auth dashboard, then run:
 
 -- INSERT INTO public.players (id, username, display_name, ball_number, color) VALUES
 --   ('<adib-uuid>',   'adib',   'Adib',   1, '#f5c518'),
 --   ('<shin-uuid>',   'shin',   'Shin',   2, '#60a5fa'),
---   ('<godine-uuid>', 'godine', 'Godine', 3, '#f87171');
+--   ('<godine-uuid>', 'godine', 'Amine', 3, '#f87171');
 
 
 -- ── OPTIONAL: Seed historical wins (scores only, no shot data) ──

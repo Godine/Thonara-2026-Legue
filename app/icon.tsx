@@ -4,7 +4,7 @@ export const size = { width: 512, height: 512 }
 export const contentType = 'image/png'
 
 // The icon: a pool ball with "T" monogram and three player-colour tints
-// — gold (Adib) / blue (Ahmed) / red (Godine) — divided pizza-style
+// — gold (Adib) / blue (Ahmed) / red (Amine) — divided pizza-style
 export default function Icon() {
   return new ImageResponse(
     (

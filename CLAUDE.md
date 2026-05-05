@@ -1,7 +1,7 @@
 # Thonara 2026 League — CLAUDE.md
 
 ## Project overview
-Pool league tracker for 3 friends: **Adib**, **Ahmed** (also called Shin), **Godine**.
+Pool league tracker for 3 friends: **Adib**, **Ahmed** (also called Shin), **Amine**.
 6-game round-robin per session. Next.js 14 App Router, Supabase (PostgreSQL + Realtime), Recharts, Tailwind CSS. Deployed on Vercel — auto-deploys on every push to any branch.
 
 **Dev branch:** `claude/pool-league-tracker-design-MZa8A`
@@ -26,7 +26,7 @@ export type PlayerUsername = 'adib' | 'ahmed' | 'godine'
 export const PLAYER_STYLES = {
   adib:   { color: '#f5c518', dimColor: '#7a6209', number: 1, label: 'Adib',   photo: '/photos/adib.jpg'   },
   ahmed:  { color: '#60a5fa', dimColor: '#1e3a5f', number: 2, label: 'Ahmed',  photo: '/photos/ahmed.jpg'  },
-  godine: { color: '#f87171', dimColor: '#7a2020', number: 3, label: 'Godine', photo: '/photos/godine.jpg' },
+  godine: { color: '#f87171', dimColor: '#7a2020', number: 3, label: 'Amine', photo: '/photos/amine.jpg' },
 }
 
 export const GAME_SCHEDULE = [
@@ -39,7 +39,7 @@ export const GAME_SCHEDULE = [
 ]
 ```
 
-Player photos live in `public/photos/adib.jpg`, `ahmed.jpg`, `godine.jpg`.
+Player photos live in `public/photos/adib.jpg`, `ahmed.jpg`, `amine.jpg`.
 
 ---
 

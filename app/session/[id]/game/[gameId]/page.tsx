@@ -739,7 +739,7 @@ export default function GamePage() {
         />
       )}
 
-      {/* Admin panel (Godine only) */}
+      {/* Admin panel (Amine only) */}
       {adminPanel && (
         <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in"
           onClick={() => setAdminPanel(false)}>
