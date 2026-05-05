@@ -85,9 +85,10 @@ export default async function Dashboard() {
               const isLeader = i === 0
 
               return (
-                <div
+                <Link
                   key={player.id}
-                  className="relative bg-pool-surface rounded-2xl border p-4 transition-all"
+                  href={`/player/${player.username}`}
+                  className="relative block bg-pool-surface rounded-2xl border p-4 transition-all active:scale-[0.99]"
                   style={{
                     borderColor: isLeader ? `${style.color}55` : '#1f3525',
                     boxShadow:   isLeader ? `0 0 24px ${style.color}12` : undefined,
@@ -136,7 +137,7 @@ export default async function Dashboard() {
                       )}
                     </div>
                   </div>
-                </div>
+                </Link>
               )
             })}
           </div>
