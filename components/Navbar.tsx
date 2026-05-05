@@ -9,10 +9,11 @@ import PlayerBall from './PlayerBall'
 import PlayerAvatar from './PlayerAvatar'
 
 const NAV_LINKS = [
-  { href: '/practice', label: 'Practice', icon: '🎱' },
-  { href: '/history',  label: 'History',  icon: '📅' },
-  { href: '/stats',    label: 'Stats',    icon: '📊' },
-  { href: '/rules',    label: 'Rules',    icon: '📖' },
+  { href: '/achievements', label: 'Badges',   icon: '🏅' },
+  { href: '/stats',        label: 'Stats',    icon: '📊' },
+  { href: '/history',      label: 'History',  icon: '📅' },
+  { href: '/practice',     label: 'Practice', icon: '🎱' },
+  { href: '/rules',        label: 'Rules',    icon: '📖' },
 ]
 
 export default function Navbar() {

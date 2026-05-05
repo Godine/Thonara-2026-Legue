@@ -6,6 +6,7 @@ import { PLAYER_STYLES, PLAYERS, type PlayerUsername } from '@/lib/game-config'
 import PlayerAvatar from '@/components/PlayerAvatar'
 import PullToRefresh from '@/components/PullToRefresh'
 import { pct, longestStreak } from '@/lib/stats'
+import { ACHIEVEMENTS, RARITY_STYLES, RARITY_ORDER, computePlayerAchievements } from '@/lib/achievements'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
 interface RawGame {
@@ -167,6 +168,12 @@ export default function PlayerProfileClient({ username, games: _games, shots }: 
 
   // Black ball incidents
   const blackBalls = myGames.filter(g => g.loser_potted_black && g.winner_id !== playerId).length
+
+  // Earned badges
+  const earnedBadgeIds = computePlayerAchievements(username, games, shots)
+  const earnedBadges = ACHIEVEMENTS
+    .filter(a => earnedBadgeIds.includes(a.id))
+    .sort((a, b) => RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity))
 
   const chartTooltipStyle = {
     contentStyle: { background: '#1a2018', border: '1px solid #2e3a2b', borderRadius: 8, fontFamily: 'Inter', fontSize: 12 },
@@ -396,6 +403,43 @@ export default function PlayerProfileClient({ username, games: _games, shots }: 
             </div>
           ))}
         </div>
+      </section>
+
+      {/* ── BADGES ────────────────────────────────────────────────── */}
+      <section className="px-4 pb-5">
+        <SectionHeader title="BADGES" sub={`${earnedBadges.length}/${ACHIEVEMENTS.length} earned`} color={style.color} />
+        {earnedBadges.length === 0 ? (
+          <div className="mt-3 bg-pool-surface rounded-2xl border border-pool-border p-6 text-center">
+            <p className="font-body text-sm text-pool-chalk-dim">No badges yet — keep playing to unlock them!</p>
+          </div>
+        ) : (
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {earnedBadges.map(achievement => {
+              const rs = RARITY_STYLES[achievement.rarity]
+              return (
+                <div
+                  key={achievement.id}
+                  className="rounded-xl border p-3 text-center"
+                  style={{ borderColor: rs.border, background: rs.bg }}
+                >
+                  <div className="text-2xl mb-1.5">{achievement.icon}</div>
+                  <p className="font-heading text-[11px] tracking-wide text-pool-chalk leading-tight">
+                    {achievement.name.toUpperCase()}
+                  </p>
+                  <p className="font-body text-[9px] mt-1 tracking-wide" style={{ color: rs.color }}>
+                    {rs.label.toUpperCase()}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <Link
+          href="/achievements"
+          className="mt-3 flex items-center justify-center gap-1 font-body text-xs text-pool-chalk-dim hover:text-pool-gold transition-colors pt-2"
+        >
+          View all badges →
+        </Link>
       </section>
 
       {/* ── OTHER PLAYERS ─────────────────────────────────────────── */}

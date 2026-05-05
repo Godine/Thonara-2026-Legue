@@ -153,11 +153,12 @@ export default async function Dashboard() {
           <span className="text-2xl tracking-widest">RACK EM UP</span>
           <span className="text-2xl">🎱</span>
         </Link>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {[
-            { href: '/stats',    icon: '📊', label: 'STATS'    },
-            { href: '/history',  icon: '📅', label: 'HISTORY'  },
-            { href: '/practice', icon: '🎯', label: 'PRACTICE' },
+            { href: '/stats',        icon: '📊', label: 'STATS'   },
+            { href: '/history',      icon: '📅', label: 'HISTORY' },
+            { href: '/achievements', icon: '🏅', label: 'BADGES'  },
+            { href: '/practice',     icon: '🎯', label: 'DRILLS'  },
           ].map(({ href, icon, label }) => (
             <Link
               key={href}
@@ -165,7 +166,7 @@ export default async function Dashboard() {
               className="flex flex-col items-center gap-1 py-3 rounded-xl border border-pool-border text-pool-chalk-dim hover:border-pool-chalk/30 hover:text-pool-chalk transition-all active:scale-[0.97]"
             >
               <span className="text-lg">{icon}</span>
-              <span className="font-heading text-xs tracking-widest">{label}</span>
+              <span className="font-heading text-[10px] tracking-widest">{label}</span>
             </Link>
           ))}
         </div>
