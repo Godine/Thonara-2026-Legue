@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { createClient } from '@/lib/supabase/server'
 import { fetchStandings, fetchRecentSession } from '@/lib/queries'
 import { generateNarrative } from '@/lib/narrative'
