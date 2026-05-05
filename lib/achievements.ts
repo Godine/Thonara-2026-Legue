@@ -21,8 +21,9 @@ export const RARITY_ORDER: Rarity[] = ['legendary', 'epic', 'rare', 'common']
 
 export const ACHIEVEMENTS: Achievement[] = [
   // Legendary
-  { id: 'champion',        icon: '🏆', name: 'Champion',        description: 'Win 7 games in a row',                                          rarity: 'legendary' },
-  { id: 'sharp_shooter',   icon: '🔭', name: 'Sharp Shooter',   description: 'Career accuracy of 72%+ across 30 or more shots',               rarity: 'legendary' },
+  { id: 'champion',         icon: '🏆', name: 'Champion',         description: 'Win 7 games in a row',                                                    rarity: 'legendary' },
+  { id: 'sharp_shooter',    icon: '🔭', name: 'Sharp Shooter',    description: 'Career accuracy of 72%+ across 30 or more shots',                          rarity: 'legendary' },
+  { id: 'la_casse_ferme',   icon: '🌪️', name: 'La Casse Ferme!',  description: 'Break and finish the game without the opponent taking a single shot',       rarity: 'legendary' },
   // Epic
   { id: 'on_fire',         icon: '⚡', name: 'On Fire',         description: 'Pot 6 balls in a row without missing',                           rarity: 'epic'      },
   { id: 'flawless',        icon: '💎', name: 'Flawless',        description: 'Win a game with zero misses or errors (min 8 shots)',             rarity: 'epic'      },
@@ -205,6 +206,13 @@ export function computePlayerAchievements(
   // sharp_shooter — 72%+ career accuracy, min 30 shots
   if (myShots.length >= 30 && myShots.filter(s => s.potted).length / myShots.length >= 0.72)
     earned.push('sharp_shooter')
+
+  // la_casse_ferme — win from break without opponent getting a single shot
+  if (myGames.some(g => {
+    if (g.winner_id !== playerId) return false
+    const gameShots = shotsByGame.get(g.id) ?? []
+    return gameShots.length >= 5 && gameShots.every(s => s.player_id === playerId)
+  })) earned.push('la_casse_ferme')
 
   return earned
 }
