@@ -6,6 +6,7 @@ import { generateNarrative } from '@/lib/narrative'
 import Link from 'next/link'
 import { format, isToday, isYesterday, parseISO } from 'date-fns'
 import PlayerAvatar from '@/components/PlayerAvatar'
+import PullToRefresh from '@/components/PullToRefresh'
 import { PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 
 const RANK_BADGES = ['🥇', '🥈', '🥉']
@@ -30,6 +31,7 @@ export default async function Dashboard() {
 
   return (
     <div className="max-w-lg mx-auto animate-fade-in">
+      <PullToRefresh />
 
       {/* ── HERO ─────────────────────────────────────────────────────── */}
       <div className="relative px-4 pt-10 pb-8 text-center overflow-hidden">

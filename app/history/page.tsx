@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { createClient } from '@/lib/supabase/server'
 import { fetchAllSessions } from '@/lib/queries'
 import Link from 'next/link'
+import PullToRefresh from '@/components/PullToRefresh'
 import { format } from 'date-fns'
 import PlayerBall from '@/components/PlayerBall'
 import { PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
@@ -33,6 +34,7 @@ export default async function HistoryPage() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-6 animate-fade-in">
+      <PullToRefresh />
       <div className="mb-5">
         <Link href="/" className="text-pool-chalk-dim text-sm font-body hover:text-pool-gold transition-colors">
           ← Home

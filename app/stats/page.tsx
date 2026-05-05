@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { createClient } from '@/lib/supabase/server'
 import { fetchCompletedGames, fetchAllShots } from '@/lib/queries'
 import StatsClient from './StatsClient'
+import PullToRefresh from '@/components/PullToRefresh'
 import Link from 'next/link'
 
 export default async function StatsPage() {
@@ -23,5 +24,10 @@ export default async function StatsPage() {
     )
   }
 
-  return <StatsClient games={games as any} shots={shots as any} />
+  return (
+    <>
+      <PullToRefresh />
+      <StatsClient games={games as any} shots={shots as any} />
+    </>
+  )
 }
