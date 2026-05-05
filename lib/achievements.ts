@@ -25,6 +25,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'sharp_shooter',    icon: '🔭', name: 'Sharp Shooter',    description: 'Career accuracy of 72%+ across 30 or more shots',                          rarity: 'legendary' },
   { id: 'la_casse_ferme',   icon: '🌪️', name: 'La Casse Ferme!',  description: 'Break and finish the game without the opponent taking a single shot',       rarity: 'legendary' },
   // Epic
+  { id: 'half_century',    icon: '💫', name: 'Half Century',    description: 'Win 50 games across your career',                                              rarity: 'epic'   },
   { id: 'on_fire',         icon: '⚡', name: 'On Fire',         description: 'Pot 6 balls in a row without missing',                                        rarity: 'epic'   },
   { id: 'flawless',        icon: '💎', name: 'Flawless',        description: 'Win a game with zero misses or errors (min 8 shots)',                          rarity: 'epic'   },
   { id: 'perfect_session', icon: '👑', name: 'Perfect Session', description: 'Win all your games in a single session',                                       rarity: 'epic'   },
@@ -37,10 +38,14 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'sniper',          icon: '🎯', name: 'Sniper',          description: '85%+ accuracy in a single game (minimum 7 shots)',                             rarity: 'rare'   },
   { id: 'hot_streak',      icon: '🔥', name: 'Hot Streak',      description: 'Win 4 games in a row',                                                        rarity: 'rare'   },
   { id: 'nemesis',         icon: '😈', name: 'Nemesis',         description: 'Beat the same opponent 8 or more times',                                      rarity: 'rare'   },
+  { id: 'wins_20',         icon: '🎖️', name: 'League Regular',  description: 'Win 20 games in total',                                                      rarity: 'rare'   },
+  { id: 'wins_30',         icon: '🌟', name: 'Pool Pro',        description: 'Win 30 games in total',                                                      rarity: 'rare'   },
   { id: 'whitewash',       icon: '🌊', name: 'Whitewash',       description: 'Win a game where your opponent plays but fails to pot a single ball',          rarity: 'rare'   },
   { id: 'century',         icon: '💯', name: 'The Century',     description: 'Pot 100 or more balls across your entire career',                              rarity: 'rare'   },
   { id: 'the_ace',         icon: '♠️', name: 'The Ace',         description: 'Win a game committing zero fouls or errors (min 8 shots)',                     rarity: 'rare'   },
   // Common
+  { id: 'wins_5',          icon: '⭐', name: 'On The Board',    description: 'Win 5 games in total',                                                       rarity: 'common' },
+  { id: 'wins_10',         icon: '💪', name: 'Double Figures',  description: 'Win 10 games in total',                                                      rarity: 'common' },
   { id: 'first_win',       icon: '🎱', name: 'First Blood',     description: 'Win your very first game',                                                    rarity: 'common' },
   { id: 'lucky_charm',     icon: '🍀', name: 'Lucky Charm',     description: 'Pot 3 or more flukes in a single game',                                       rarity: 'common' },
   { id: 'veteran',         icon: '🎮', name: 'Veteran',         description: 'Play 30 or more games total',                                                 rarity: 'common' },
@@ -266,6 +271,14 @@ export function computePlayerAchievements(
       if (consec >= 3) { earned.push('three_peat'); break }
     }
   }
+
+  // career win milestones
+  const totalWins = myGames.filter(g => g.winner_id === playerId).length
+  if (totalWins >= 5)  earned.push('wins_5')
+  if (totalWins >= 10) earned.push('wins_10')
+  if (totalWins >= 20) earned.push('wins_20')
+  if (totalWins >= 30) earned.push('wins_30')
+  if (totalWins >= 50) earned.push('half_century')
 
   return earned
 }
