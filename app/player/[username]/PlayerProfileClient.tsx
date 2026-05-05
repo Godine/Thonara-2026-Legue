@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { PLAYER_STYLES, PLAYERS, type PlayerUsername } from '@/lib/game-config'
@@ -44,6 +45,7 @@ const RANK_BADGES = ['🥇', '🥈', '🥉']
 
 export default function PlayerProfileClient({ username, games: _games, shots }: Props) {
   const style = PLAYER_STYLES[username]
+  const [flippedBadge, setFlippedBadge] = useState<string | null>(null)
 
   // Sort chronologically
   const games = [..._games].sort((a, b) => {
@@ -416,19 +418,45 @@ export default function PlayerProfileClient({ username, games: _games, shots }: 
           <div className="mt-3 grid grid-cols-3 gap-2">
             {earnedBadges.map(achievement => {
               const rs = RARITY_STYLES[achievement.rarity]
+              const isFlipped = flippedBadge === achievement.id
               return (
                 <div
                   key={achievement.id}
-                  className="rounded-xl border p-3 text-center"
-                  style={{ borderColor: rs.border, background: rs.bg }}
+                  onClick={() => setFlippedBadge(isFlipped ? null : achievement.id)}
+                  className="relative cursor-pointer"
+                  style={{ height: '90px', perspective: '600px' }}
                 >
-                  <div className="text-2xl mb-1.5">{achievement.icon}</div>
-                  <p className="font-heading text-[11px] tracking-wide text-pool-chalk leading-tight">
-                    {achievement.name.toUpperCase()}
-                  </p>
-                  <p className="font-body text-[9px] mt-1 tracking-wide" style={{ color: rs.color }}>
-                    {rs.label.toUpperCase()}
-                  </p>
+                  {/* Flipper */}
+                  <div style={{
+                    position: 'absolute', inset: 0,
+                    transformStyle: 'preserve-3d',
+                    transition: 'transform 0.38s ease',
+                    transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                  }}>
+                    {/* Front */}
+                    <div
+                      className="absolute inset-0 rounded-xl border flex flex-col items-center justify-center p-2 text-center"
+                      style={{ borderColor: rs.border, background: rs.bg, backfaceVisibility: 'hidden' }}
+                    >
+                      <div className="text-2xl mb-1">{achievement.icon}</div>
+                      <p className="font-heading text-[11px] tracking-wide text-pool-chalk leading-tight">
+                        {achievement.name.toUpperCase()}
+                      </p>
+                      <p className="font-body text-[9px] mt-0.5 tracking-wide" style={{ color: rs.color }}>
+                        {rs.label.toUpperCase()}
+                      </p>
+                    </div>
+                    {/* Back */}
+                    <div
+                      className="absolute inset-0 rounded-xl border flex flex-col items-center justify-center gap-1.5 p-2.5 text-center"
+                      style={{ borderColor: rs.border, background: rs.bg, backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                    >
+                      <span className="text-base leading-none">{achievement.icon}</span>
+                      <p className="font-body text-[9px] text-pool-chalk leading-snug">
+                        {achievement.description}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )
             })}
