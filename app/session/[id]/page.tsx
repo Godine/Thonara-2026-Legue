@@ -12,6 +12,7 @@ import {
 } from '@/lib/queries'
 import { getPlayerStats } from '@/lib/stats'
 import { generateNarrative } from '@/lib/narrative'
+import { getSessionPrediction } from '@/lib/session-prediction'
 import { GAME_SCHEDULE, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import PlayerBall from '@/components/PlayerBall'
 import type { Game, Player, Shot } from '@/types/database'
@@ -252,6 +253,45 @@ export default function SessionPage() {
             {generateNarrative(standings)}
           </p>
         </div>
+
+        {(() => {
+          const predPlayers = sortedStandings.map(s => ({
+            username: s.username as PlayerUsername,
+            displayName: s.display_name,
+          }))
+          const pred = getSessionPrediction(session.id, predPlayers)
+          if (!pred) return null
+          const predStyle = PLAYER_STYLES[pred.username]
+          return (
+            <div className="rounded-2xl border overflow-hidden mb-4"
+              style={{ borderColor: `${predStyle?.color}33`, background: `${predStyle?.color}08` }}>
+              <div className="px-4 py-2.5 border-b flex items-center gap-2"
+                style={{ borderColor: `${predStyle?.color}22` }}>
+                <span className="text-base">🔮</span>
+                <p className="font-heading text-xs tracking-widest text-pool-chalk-dim">TONIGHT'S PREDICTION</p>
+              </div>
+              <div className="px-4 py-4">
+                <div className="flex items-center gap-3 mb-3">
+                  {predStyle && <PlayerBall number={predStyle.number} color={predStyle.color} size={42} />}
+                  <div>
+                    <p className="font-heading text-2xl tracking-widest leading-none" style={{ color: predStyle?.color }}>
+                      {pred.displayName.toUpperCase()}
+                    </p>
+                    <p className="font-body text-[10px] tracking-[0.2em] text-pool-chalk-dim mt-0.5">
+                      PREDICTED WINNER
+                    </p>
+                  </div>
+                </div>
+                <p className="font-body text-sm text-pool-chalk-dim italic leading-relaxed">
+                  &ldquo;{pred.reason}&rdquo;
+                </p>
+                <p className="font-body text-[9px] text-pool-chalk-dim/35 mt-2 text-right tracking-wide">
+                  totally unscientific
+                </p>
+              </div>
+            </div>
+          )
+        })()}
 
         {previewStats && (
           <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden mb-4">
