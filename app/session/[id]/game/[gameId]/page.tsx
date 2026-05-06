@@ -500,6 +500,15 @@ export default function GamePage() {
             /* Break recording */
             <div className="flex-1 flex flex-col">
               <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">WHO BROKE?</p>
+
+              {/* Coin flip shortcut */}
+              <Link
+                href={`/coin?p1=${p1.username}&p2=${p2.username}&back=/session/${game.session_id}/game/${game.id}`}
+                className="flex items-center justify-center gap-2 mb-4 py-2.5 rounded-xl border border-pool-border text-pool-chalk-dim font-body text-sm hover:text-pool-chalk hover:border-pool-chalk/30 transition-all"
+              >
+                🪙 <span>Can't decide? Flip a coin</span>
+              </Link>
+
               <div className="grid grid-cols-2 gap-3 mb-4">
                 {[p1, p2].map(player => {
                   const style = PLAYER_STYLES[player.username as PlayerUsername]
