@@ -37,7 +37,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'hat_trick',       icon: '🎩', name: 'Hat Trick',       description: 'Pot 4 balls in a row without missing',                                        rarity: 'rare'   },
   { id: 'sniper',          icon: '🎯', name: 'Sniper',          description: '85%+ accuracy in a single game (minimum 7 shots)',                             rarity: 'rare'   },
   { id: 'hot_streak',      icon: '🔥', name: 'Hot Streak',      description: 'Win 4 games in a row',                                                        rarity: 'rare'   },
-  { id: 'nemesis',         icon: '😈', name: 'Nemesis',         description: 'Beat the same opponent 8 or more times',                                      rarity: 'rare'   },
+  { id: 'nemesis',         icon: '😈', name: 'Nemesis',         description: 'Beat the same opponent 10 times in a row',                                    rarity: 'rare'   },
   { id: 'wins_20',         icon: '🎖️', name: 'League Regular',  description: 'Win 20 games in total',                                                      rarity: 'rare'   },
   { id: 'wins_30',         icon: '🌟', name: 'Pool Pro',        description: 'Win 30 games in total',                                                      rarity: 'rare'   },
   { id: 'whitewash',       icon: '🌊', name: 'Whitewash',       description: 'Win a game where your opponent plays but fails to pot a single ball',          rarity: 'rare'   },
@@ -157,7 +157,7 @@ export function computePlayerAchievements(
   if (longestWinStreak(myGames, playerId) >= 4)
     earned.push('hot_streak')
 
-  // nemesis — beat same opponent 8+ times
+  // nemesis — beat same opponent 10 times in a row
   if (PLAYERS.filter(u => u !== username).some(opp => {
     const oid = usernameToId[opp] ?? ''
     if (!oid) return false
@@ -165,7 +165,12 @@ export function computePlayerAchievements(
       (g.player1_id === playerId && g.player2_id === oid) ||
       (g.player2_id === playerId && g.player1_id === oid)
     )
-    return h2h.filter(g => g.winner_id === playerId).length >= 8
+    let streak = 0, best = 0
+    for (const g of h2h) {
+      if (g.winner_id === playerId) { streak++; best = Math.max(best, streak) }
+      else streak = 0
+    }
+    return best >= 10
   })) earned.push('nemesis')
 
   // on_fire — 6 in a row
