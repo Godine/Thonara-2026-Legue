@@ -9,6 +9,7 @@ import {
   RARITY_STYLES,
   RARITY_ORDER,
   computeAllAchievements,
+  computeAllProgress,
   type Rarity,
 } from '@/lib/achievements'
 
@@ -18,8 +19,9 @@ interface Props {
 }
 
 export default function AchievementsClient({ games, shots }: Props) {
-  const earned = computeAllAchievements(games, shots)
-  const total  = ACHIEVEMENTS.length
+  const earned      = computeAllAchievements(games, shots)
+  const allProgress = computeAllProgress(games, shots)
+  const total       = ACHIEVEMENTS.length
 
   return (
     <div className="max-w-lg mx-auto pb-16 animate-fade-in">
@@ -149,6 +151,34 @@ export default function AchievementsClient({ games, shots }: Props) {
                           </div>
                         )}
                       </div>
+                    </div>
+
+                    {/* Per-player progress */}
+                    <div className="mt-3 pt-3 border-t border-pool-border/40 space-y-1.5">
+                      {PLAYERS.map(u => {
+                        const prog     = allProgress[u]?.[achievement.id]
+                        const isEarned = earned[u]?.includes(achievement.id)
+                        const style    = PLAYER_STYLES[u]
+                        if (!prog) return null
+                        const pct  = Math.min(100, Math.round((prog.current / prog.target) * 100))
+                        const text = isEarned ? '✓' : (prog.label ?? `${prog.current}/${prog.target}`)
+                        return (
+                          <div key={u} className="flex items-center gap-2">
+                            <span className="font-body text-[10px] w-9 shrink-0 truncate" style={{ color: style.color }}>
+                              {style.label}
+                            </span>
+                            <div className="flex-1 h-1 bg-pool-border rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{ width: `${pct}%`, backgroundColor: isEarned ? style.color : `${style.color}77` }}
+                              />
+                            </div>
+                            <span className="font-body text-[10px] text-pool-chalk-dim shrink-0 w-14 text-right">
+                              {text}
+                            </span>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )

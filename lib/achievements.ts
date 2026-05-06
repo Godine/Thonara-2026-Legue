@@ -33,6 +33,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'black_magic',     icon: '⚫', name: 'Black Magic',     description: 'Win 5 games where the opponent potted the black ball',                          rarity: 'epic'   },
   { id: 'the_shark',       icon: '🦈', name: 'The Shark',       description: 'Maintain a 70%+ win rate across 15 or more games',                             rarity: 'epic'   },
   { id: 'three_peat',      icon: '🎊', name: 'Three-Peat',      description: 'Win all your games in 3 consecutive sessions',                                 rarity: 'epic'   },
+  { id: 'first_20',        icon: '🥇', name: 'It Was Supposed To Be Ahmed', description: 'Be the first player to reach 20 wins in the league',                    rarity: 'epic'   },
   // Rare
   { id: 'hat_trick',       icon: '🎩', name: 'Hat Trick',       description: 'Pot 4 balls in a row without missing',                                        rarity: 'rare'   },
   { id: 'sniper',          icon: '🎯', name: 'Sniper',          description: '85%+ accuracy in a single game (minimum 7 shots)',                             rarity: 'rare'   },
@@ -50,6 +51,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'lucky_charm',     icon: '🍀', name: 'Lucky Charm',     description: 'Pot 3 or more flukes in a single game',                                       rarity: 'common' },
   { id: 'veteran',         icon: '🎮', name: 'Veteran',         description: 'Play 30 or more games total',                                                 rarity: 'common' },
   { id: 'grinder',         icon: '⚙️', name: 'The Grinder',     description: 'Win a game in which you personally took 14 or more shots',                    rarity: 'common' },
+  { id: 'most_clumsy',    icon: '🤦', name: 'The Most Clumsy', description: 'Commit 3 or more errors in a single game',                                           rarity: 'common' },
 ]
 
 // Minimal types matching what fetchCompletedGames / fetchAllShots return
@@ -277,6 +279,27 @@ export function computePlayerAchievements(
     }
   }
 
+  // first_20 — first player in the league to reach 20 wins
+  {
+    const allSorted = [...games].sort((a, b) => {
+      const da = a.session?.date ?? ''; const db = b.session?.date ?? ''
+      return da !== db ? da.localeCompare(db) : a.game_number - b.game_number
+    })
+    const winCounts: Record<string, number> = {}
+    let firstTo20: string | null = null
+    for (const g of allSorted) {
+      if (!g.winner_id) continue
+      winCounts[g.winner_id] = (winCounts[g.winner_id] ?? 0) + 1
+      if (winCounts[g.winner_id] >= 20 && firstTo20 === null) firstTo20 = g.winner_id
+    }
+    if (firstTo20 === playerId) earned.push('first_20')
+  }
+
+  // most_clumsy — 3+ errors in a single game
+  if (myGames.some(g =>
+    (shotsByGame.get(g.id) ?? []).filter(s => s.player_id === playerId && s.is_error).length >= 3
+  )) earned.push('most_clumsy')
+
   // career win milestones
   const totalWins = myGames.filter(g => g.winner_id === playerId).length
   if (totalWins >= 5)  earned.push('wins_5')
@@ -295,6 +318,213 @@ export function computeAllAchievements(
   const result = {} as Record<PlayerUsername, string[]>
   for (const u of PLAYERS) {
     result[u] = computePlayerAchievements(u, games, shots)
+  }
+  return result
+}
+
+export interface AchievementProgress {
+  current: number
+  target: number
+  label?: string
+}
+
+export type ProgressMap = Record<string, AchievementProgress>
+
+export function computePlayerProgress(
+  username: PlayerUsername,
+  games: RawGame[],
+  shots: RawShot[],
+): ProgressMap {
+  const sorted = [...games].sort((a, b) => {
+    const da = a.session?.date ?? '', db = b.session?.date ?? ''
+    return da !== db ? da.localeCompare(db) : a.game_number - b.game_number
+  })
+
+  const usernameToId: Partial<Record<PlayerUsername, string>> = {}
+  for (const g of sorted) {
+    usernameToId[g.player1.username as PlayerUsername] = g.player1_id
+    usernameToId[g.player2.username as PlayerUsername] = g.player2_id
+  }
+  const playerId = usernameToId[username] ?? ''
+  if (!playerId) return {}
+
+  const myGames = sorted.filter(g => g.player1_id === playerId || g.player2_id === playerId)
+  const myShots = shots.filter(s => s.player_id === playerId)
+
+  const shotsByGame = new Map<string, RawShot[]>()
+  for (const s of shots) {
+    if (!shotsByGame.has(s.game_id)) shotsByGame.set(s.game_id, [])
+    shotsByGame.get(s.game_id)!.push(s)
+  }
+
+  const totalWins = myGames.filter(g => g.winner_id === playerId).length
+  const careerPots = myShots.filter(s => s.potted).length
+
+  // Max consecutive pots in any game (shared by hat_trick + on_fire)
+  const maxConsecPotsEver = myGames.reduce((max, g) => {
+    const gs = (shotsByGame.get(g.id) ?? []).sort((a, b) => a.shot_number - b.shot_number)
+    let cur = 0, gmax = 0
+    for (const s of gs) {
+      if (s.player_id === playerId && s.potted) { cur++; gmax = Math.max(gmax, cur) }
+      else cur = 0
+    }
+    return Math.max(max, gmax)
+  }, 0)
+
+  const bestWinStreak = longestWinStreak(myGames, playerId)
+
+  // Best consecutive H2H streak vs any opponent
+  let bestH2HStreak = 0
+  for (const opp of PLAYERS.filter(u => u !== username)) {
+    const oid = usernameToId[opp] ?? ''
+    if (!oid) continue
+    const h2h = myGames.filter(g =>
+      (g.player1_id === playerId && g.player2_id === oid) ||
+      (g.player2_id === playerId && g.player1_id === oid)
+    )
+    let streak = 0
+    for (const g of h2h) {
+      if (g.winner_id === playerId) streak++
+      else streak = 0
+      bestH2HStreak = Math.max(bestH2HStreak, streak)
+    }
+  }
+
+  // Best accuracy in any game with min 7 shots
+  const bestGameAcc = myGames.reduce((max, g) => {
+    const gs = (shotsByGame.get(g.id) ?? []).filter(s => s.player_id === playerId)
+    if (gs.length < 7) return max
+    return Math.max(max, Math.round((gs.filter(s => s.potted).length / gs.length) * 100))
+  }, 0)
+
+  // Max lucky shots in any single game
+  const maxLuckyInGame = myGames.reduce((max, g) =>
+    Math.max(max, (shotsByGame.get(g.id) ?? []).filter(s => s.player_id === playerId && s.is_lucky).length), 0)
+
+  // Max errors in any single game
+  const maxErrorsInGame = myGames.reduce((max, g) =>
+    Math.max(max, (shotsByGame.get(g.id) ?? []).filter(s => s.player_id === playerId && s.is_error).length), 0)
+
+  const lpbWins = myGames.filter(g => g.winner_id === playerId && g.loser_potted_black).length
+
+  // Max shots taken in any won game
+  const maxShotsInWin = myGames
+    .filter(g => g.winner_id === playerId)
+    .reduce((max, g) =>
+      Math.max(max, (shotsByGame.get(g.id) ?? []).filter(s => s.player_id === playerId).length), 0)
+
+  // Max deficit overcome in any won game
+  const maxDeficit = myGames
+    .filter(g => g.winner_id === playerId)
+    .reduce((max, g) => {
+      const oppId = g.player1_id === playerId ? g.player2_id : g.player1_id
+      const gs = (shotsByGame.get(g.id) ?? []).sort((a, b) => a.shot_number - b.shot_number)
+      let myP = 0, oppP = 0, peak = 0
+      for (const s of gs) {
+        if (s.player_id === playerId && s.potted) myP++
+        else if (s.player_id === oppId && s.potted) oppP++
+        peak = Math.max(peak, oppP - myP)
+      }
+      return Math.max(max, peak)
+    }, 0)
+
+  // Binary: flawless wins (win + min 8 shots + all potted)
+  const flawlessCount = myGames.filter(g => {
+    if (g.winner_id !== playerId) return false
+    const gs = (shotsByGame.get(g.id) ?? []).filter(s => s.player_id === playerId)
+    return gs.length >= 8 && gs.every(s => s.potted)
+  }).length
+
+  // Binary: ace wins (win + min 8 shots + 0 errors)
+  const aceWins = myGames.filter(g => {
+    if (g.winner_id !== playerId) return false
+    const gs = (shotsByGame.get(g.id) ?? []).filter(s => s.player_id === playerId)
+    return gs.length >= 8 && !gs.some(s => s.is_error)
+  }).length
+
+  // Binary: la casse ferme (all shots by this player)
+  const lacasseCount = myGames.filter(g => {
+    if (g.winner_id !== playerId) return false
+    const gs = shotsByGame.get(g.id) ?? []
+    return gs.length >= 5 && gs.every(s => s.player_id === playerId)
+  }).length
+
+  // Binary: whitewash (opp played but potted nothing)
+  const whitewashCount = myGames.filter(g => {
+    if (g.winner_id !== playerId) return false
+    const oppId = g.player1_id === playerId ? g.player2_id : g.player1_id
+    const oppShots = (shotsByGame.get(g.id) ?? []).filter(s => s.player_id === oppId)
+    return oppShots.length > 0 && oppShots.every(s => !s.potted)
+  }).length
+
+  // Sessions data
+  const seenSess = new Set<string>(); const sessOrder: string[] = []
+  for (const g of myGames) {
+    if (!seenSess.has(g.session_id)) { seenSess.add(g.session_id); sessOrder.push(g.session_id) }
+  }
+
+  const perfectSessionCount = sessOrder.filter(sid => {
+    const sg = myGames.filter(g => g.session_id === sid && g.winner_id !== null)
+    return sg.length > 0 && sg.every(g => g.winner_id === playerId)
+  }).length
+
+  let bestConsecPerfect = 0, consec = 0
+  for (const sid of sessOrder) {
+    const sg = myGames.filter(g => g.session_id === sid && g.winner_id !== null)
+    if (sg.length > 0 && sg.every(g => g.winner_id === playerId)) { consec++; bestConsecPerfect = Math.max(bestConsecPerfect, consec) }
+    else consec = 0
+  }
+
+  // Sharp shooter: phase by shot count
+  const sharpProg = myShots.length < 30
+    ? { current: myShots.length, target: 30, label: `${myShots.length}/30 shots` }
+    : { current: Math.round((careerPots / myShots.length) * 100), target: 72, label: `${Math.round((careerPots / myShots.length) * 100)}%/72%` }
+
+  // The shark: phase by game count
+  const sharkWinRate = myGames.length > 0 ? Math.round((totalWins / myGames.length) * 100) : 0
+  const sharkProg = myGames.length < 15
+    ? { current: myGames.length, target: 15, label: `${myGames.length}/15 games` }
+    : { current: sharkWinRate, target: 70, label: `${sharkWinRate}%/70%` }
+
+  return {
+    first_win:        { current: Math.min(totalWins, 1),           target: 1 },
+    lucky_charm:      { current: maxLuckyInGame,                    target: 3 },
+    veteran:          { current: myGames.length,                    target: 30 },
+    hat_trick:        { current: Math.min(maxConsecPotsEver, 4),    target: 4 },
+    sniper:           { current: bestGameAcc,                       target: 85, label: `${bestGameAcc}%/85%` },
+    hot_streak:       { current: Math.min(bestWinStreak, 4),        target: 4 },
+    nemesis:          { current: Math.min(bestH2HStreak, 10),       target: 10 },
+    on_fire:          { current: Math.min(maxConsecPotsEver, 6),    target: 6 },
+    flawless:         { current: flawlessCount,                     target: 1 },
+    perfect_session:  { current: perfectSessionCount,               target: 1 },
+    comeback:         { current: Math.min(maxDeficit, 4),           target: 4 },
+    black_magic:      { current: lpbWins,                           target: 5 },
+    champion:         { current: Math.min(bestWinStreak, 7),        target: 7 },
+    sharp_shooter:    sharpProg,
+    la_casse_ferme:   { current: lacasseCount,                      target: 1 },
+    whitewash:        { current: whitewashCount,                    target: 1 },
+    century:          { current: careerPots,                        target: 100 },
+    the_ace:          { current: aceWins,                           target: 1 },
+    grinder:          { current: Math.min(maxShotsInWin, 14),       target: 14 },
+    the_shark:        sharkProg,
+    three_peat:       { current: Math.min(bestConsecPerfect, 3),    target: 3 },
+    wins_5:           { current: Math.min(totalWins, 5),            target: 5 },
+    wins_10:          { current: Math.min(totalWins, 10),           target: 10 },
+    wins_20:          { current: Math.min(totalWins, 20),           target: 20 },
+    wins_30:          { current: Math.min(totalWins, 30),           target: 30 },
+    half_century:     { current: Math.min(totalWins, 50),           target: 50 },
+    first_20:         { current: Math.min(totalWins, 20),           target: 20 },
+    most_clumsy:      { current: maxErrorsInGame,                   target: 3 },
+  }
+}
+
+export function computeAllProgress(
+  games: RawGame[],
+  shots: RawShot[],
+): Record<PlayerUsername, ProgressMap> {
+  const result = {} as Record<PlayerUsername, ProgressMap>
+  for (const u of PLAYERS) {
+    result[u] = computePlayerProgress(u, games, shots)
   }
   return result
 }
