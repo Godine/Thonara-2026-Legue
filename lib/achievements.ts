@@ -8,6 +8,7 @@ export interface Achievement {
   name: string
   description: string
   rarity: Rarity
+  exclusive?: boolean  // only one player can ever earn this
 }
 
 export const RARITY_STYLES: Record<Rarity, { label: string; color: string; border: string; bg: string }> = {
@@ -33,7 +34,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'black_magic',     icon: '⚫', name: 'Black Magic',     description: 'Win 5 games where the opponent potted the black ball',                          rarity: 'epic'   },
   { id: 'the_shark',       icon: '🦈', name: 'The Shark',       description: 'Maintain a 70%+ win rate across 15 or more games',                             rarity: 'epic'   },
   { id: 'three_peat',      icon: '🎊', name: 'Three-Peat',      description: 'Win all your games in 3 consecutive sessions',                                 rarity: 'epic'   },
-  { id: 'first_20',        icon: '🥇', name: 'It Was Supposed To Be Ahmed', description: 'Be the first player to reach 20 wins in the league',                    rarity: 'epic'   },
+  { id: 'first_20',        icon: '🥇', name: 'It Was Supposed To Be Ahmed', description: 'Be the first player to reach 20 wins in the league',                    rarity: 'epic', exclusive: true },
   // Rare
   { id: 'hat_trick',       icon: '🎩', name: 'Hat Trick',       description: 'Pot 4 balls in a row without missing',                                        rarity: 'rare'   },
   { id: 'sniper',          icon: '🎯', name: 'Sniper',          description: '85%+ accuracy in a single game (minimum 7 shots)',                             rarity: 'rare'   },

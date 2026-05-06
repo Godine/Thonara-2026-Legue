@@ -160,6 +160,21 @@ export default function AchievementsClient({ games, shots }: Props) {
                         const isEarned = earned[u]?.includes(achievement.id)
                         const style    = PLAYER_STYLES[u]
                         if (!prog) return null
+
+                        // Exclusive badge already claimed by someone else
+                        const takenByOther = achievement.exclusive && !isEarned && earnedBy.length > 0
+                        if (takenByOther) {
+                          return (
+                            <div key={u} className="flex items-center gap-2">
+                              <span className="font-body text-[10px] w-9 shrink-0 truncate" style={{ color: `${style.color}55` }}>
+                                {style.label}
+                              </span>
+                              <div className="flex-1 h-1 bg-pool-border rounded-full overflow-hidden" />
+                              <span className="font-body text-[10px] text-pool-chalk-dim/40 shrink-0 w-14 text-right">Taken</span>
+                            </div>
+                          )
+                        }
+
                         const pct  = Math.min(100, Math.round((prog.current / prog.target) * 100))
                         const text = isEarned ? '✓' : (prog.label ?? `${prog.current}/${prog.target}`)
                         return (
