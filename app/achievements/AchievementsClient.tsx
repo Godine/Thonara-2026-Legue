@@ -80,6 +80,23 @@ export default function AchievementsClient({ games, shots }: Props) {
         </div>
       </section>
 
+      {/* ── RECORDS LINK ─────────────────────────────────────────────── */}
+      <section className="px-4 pb-6">
+        <Link
+          href="/records"
+          className="flex items-center justify-between w-full bg-pool-surface border border-pool-border rounded-2xl px-5 py-4 hover:border-pool-gold/40 hover:bg-pool-gold/5 transition-all active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🏅</span>
+            <div>
+              <p className="font-heading text-base tracking-wide text-pool-chalk leading-none">ALL-TIME RECORDS</p>
+              <p className="font-body text-xs text-pool-chalk-dim mt-0.5">Hall of fame · best numbers ever</p>
+            </div>
+          </div>
+          <span className="text-pool-chalk-dim text-lg">›</span>
+        </Link>
+      </section>
+
       {/* ── ACHIEVEMENT SECTIONS ──────────────────────────────────────── */}
       {RARITY_ORDER.map(rarity => {
         const rarityAchievements = ACHIEVEMENTS.filter(a => a.rarity === rarity)
