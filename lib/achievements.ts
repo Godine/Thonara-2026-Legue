@@ -32,7 +32,6 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'perfect_session', icon: '👑', name: 'Perfect Session', description: 'Win all your games in a single session',                                       rarity: 'epic'   },
   { id: 'comeback',        icon: '😤', name: 'Comeback Kid',    description: 'Win after your opponent was 4 or more pots ahead of you',                      rarity: 'epic'   },
   { id: 'black_magic',     icon: '⚫', name: 'Black Magic',     description: 'Win 5 games where the opponent potted the black ball',                          rarity: 'epic'   },
-  { id: 'the_shark',       icon: '🦈', name: 'The Shark',       description: 'Maintain a 70%+ win rate across 15 or more games',                             rarity: 'epic'   },
   { id: 'three_peat',      icon: '🎊', name: 'Three-Peat',      description: 'Win all your games in 3 consecutive sessions',                                 rarity: 'epic'   },
   { id: 'first_20',        icon: '🥇', name: 'It Was Supposed To Be Ahmed', description: 'Be the first player to reach 20 wins in the league',                    rarity: 'epic', exclusive: true },
   // Rare
@@ -40,11 +39,9 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'sniper',          icon: '🎯', name: 'Sniper',          description: '85%+ accuracy in a single game (minimum 7 shots)',                             rarity: 'rare'   },
   { id: 'hot_streak',      icon: '🔥', name: 'Hot Streak',      description: 'Win 4 games in a row',                                                        rarity: 'rare'   },
   { id: 'nemesis',         icon: '😈', name: 'Nemesis',         description: 'Beat the same opponent 10 times in a row',                                    rarity: 'rare'   },
-  { id: 'wins_20',         icon: '🎖️', name: 'League Regular',  description: 'Win 20 games in total',                                                      rarity: 'rare'   },
   { id: 'wins_30',         icon: '🌟', name: 'Pool Pro',        description: 'Win 30 games in total',                                                      rarity: 'rare'   },
   { id: 'whitewash',       icon: '🌊', name: 'Whitewash',       description: 'Win a game where your opponent plays but fails to pot a single ball',          rarity: 'rare'   },
   { id: 'century',         icon: '💯', name: 'The Century',     description: 'Pot 100 or more balls across your entire career',                              rarity: 'rare'   },
-  { id: 'the_ace',         icon: '♠️', name: 'The Ace',         description: 'Win a game committing zero fouls or errors (min 8 shots)',                     rarity: 'rare'   },
   // Common
   { id: 'wins_5',          icon: '⭐', name: 'On The Board',    description: 'Win 5 games in total',                                                       rarity: 'common' },
   { id: 'wins_10',         icon: '💪', name: 'Double Figures',  description: 'Win 10 games in total',                                                      rarity: 'common' },
@@ -245,24 +242,12 @@ export function computePlayerAchievements(
   if (myShots.filter(s => s.potted).length >= 100)
     earned.push('century')
 
-  // the_ace — win with 8+ shots and zero errors/fouls committed
-  if (myGames.some(g => {
-    if (g.winner_id !== playerId) return false
-    const gs = (shotsByGame.get(g.id) ?? []).filter(s => s.player_id === playerId)
-    return gs.length >= 8 && !gs.some(s => s.is_error)
-  })) earned.push('the_ace')
-
   // grinder — win a game taking 14+ shots yourself (patient, attrition-style)
   if (myGames.some(g => {
     if (g.winner_id !== playerId) return false
     const gs = (shotsByGame.get(g.id) ?? []).filter(s => s.player_id === playerId)
     return gs.length >= 14
   })) earned.push('grinder')
-
-  // the_shark — 70%+ win rate with 15+ games (dominant, hustler-level consistency)
-  if (myGames.length >= 15 &&
-      myGames.filter(g => g.winner_id === playerId).length / myGames.length >= 0.70)
-    earned.push('the_shark')
 
   // three_peat — win all games in 3 consecutive sessions
   {
@@ -305,7 +290,6 @@ export function computePlayerAchievements(
   const totalWins = myGames.filter(g => g.winner_id === playerId).length
   if (totalWins >= 5)  earned.push('wins_5')
   if (totalWins >= 10) earned.push('wins_10')
-  if (totalWins >= 20) earned.push('wins_20')
   if (totalWins >= 30) earned.push('wins_30')
   if (totalWins >= 50) earned.push('half_century')
 
@@ -436,13 +420,6 @@ export function computePlayerProgress(
     return gs.length >= 8 && gs.every(s => s.potted)
   }).length
 
-  // Binary: ace wins (win + min 8 shots + 0 errors)
-  const aceWins = myGames.filter(g => {
-    if (g.winner_id !== playerId) return false
-    const gs = (shotsByGame.get(g.id) ?? []).filter(s => s.player_id === playerId)
-    return gs.length >= 8 && !gs.some(s => s.is_error)
-  }).length
-
   // Binary: la casse ferme (all shots by this player)
   const lacasseCount = myGames.filter(g => {
     if (g.winner_id !== playerId) return false
@@ -481,12 +458,6 @@ export function computePlayerProgress(
     ? { current: myShots.length, target: 30, label: `${myShots.length}/30 shots` }
     : { current: Math.round((careerPots / myShots.length) * 100), target: 72, label: `${Math.round((careerPots / myShots.length) * 100)}%/72%` }
 
-  // The shark: phase by game count
-  const sharkWinRate = myGames.length > 0 ? Math.round((totalWins / myGames.length) * 100) : 0
-  const sharkProg = myGames.length < 15
-    ? { current: myGames.length, target: 15, label: `${myGames.length}/15 games` }
-    : { current: sharkWinRate, target: 70, label: `${sharkWinRate}%/70%` }
-
   return {
     first_win:        { current: Math.min(totalWins, 1),           target: 1 },
     lucky_charm:      { current: maxLuckyInGame,                    target: 3 },
@@ -505,13 +476,10 @@ export function computePlayerProgress(
     la_casse_ferme:   { current: lacasseCount,                      target: 1 },
     whitewash:        { current: whitewashCount,                    target: 1 },
     century:          { current: careerPots,                        target: 100 },
-    the_ace:          { current: aceWins,                           target: 1 },
     grinder:          { current: Math.min(maxShotsInWin, 14),       target: 14 },
-    the_shark:        sharkProg,
     three_peat:       { current: Math.min(bestConsecPerfect, 3),    target: 3 },
     wins_5:           { current: Math.min(totalWins, 5),            target: 5 },
     wins_10:          { current: Math.min(totalWins, 10),           target: 10 },
-    wins_20:          { current: Math.min(totalWins, 20),           target: 20 },
     wins_30:          { current: Math.min(totalWins, 30),           target: 30 },
     half_century:     { current: Math.min(totalWins, 50),           target: 50 },
     first_20:         { current: Math.min(totalWins, 20),           target: 20 },
