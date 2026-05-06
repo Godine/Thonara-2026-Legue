@@ -154,7 +154,9 @@ export function computeRecords(games: RawGame[], shots: RawShot[]): RecordSectio
       const cur = best.get(c.username)
       if (!cur || c.value > cur.value) best.set(c.username, c)
     }
-    return [...best.values()]
+    const result: Candidate[] = []
+    best.forEach(v => result.push(v))
+    return result
   }
 
   const mostGamePots  = pickRecord(bestPerPlayer(gamePotsPerPlayer),  v => `${v}`)
