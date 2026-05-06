@@ -478,8 +478,9 @@ export default function SessionPage() {
 
       <div className="space-y-3">
         {session.games.map(game => {
-          const p1Stats = getPlayerStats(game.shots, game.player1_id)
-          const p2Stats = getPlayerStats(game.shots, game.player2_id)
+          const gameShots = game.shots ?? []
+          const p1Stats = getPlayerStats(gameShots, game.player1_id)
+          const p2Stats = getPlayerStats(gameShots, game.player2_id)
           const schedule = GAME_SCHEDULE.find(g => g.gameNumber === game.game_number)
           const p1Style = PLAYER_STYLES[game.player1.username as PlayerUsername]
           const p2Style = PLAYER_STYLES[game.player2.username as PlayerUsername]
@@ -508,7 +509,7 @@ export default function SessionPage() {
                 </div>
                 {game.is_complete ? (
                   <span className="ml-1 text-xs font-body text-pool-green-bright">✓</span>
-                ) : game.shots.length > 0 ? (
+                ) : gameShots.length > 0 ? (
                   <span className="ml-1 text-xs font-body text-pool-gold">●</span>
                 ) : (
                   <span className="ml-1 text-xs font-body text-pool-chalk-dim">–</span>
@@ -535,7 +536,7 @@ export default function SessionPage() {
                 </div>
               )}
 
-              {game.shots.length > 0 && (
+              {gameShots.length > 0 && (
                 <div className="grid grid-cols-2 divide-x divide-pool-border border-t border-pool-border">
                   {[{ player: game.player1, stats: p1Stats }, { player: game.player2, stats: p2Stats }].map(({ player, stats }) => (
                     <div key={player.id} className="px-4 py-2">
@@ -647,7 +648,7 @@ export default function SessionPage() {
       </div>
 
       {completedGames.length === totalGames && totalGames > 0 && (() => {
-        const allShots = completedGames.flatMap(g => g.shots)
+        const allShots = completedGames.flatMap(g => g.shots ?? [])
         const sessionStats = uniquePlayers.map(player => {
           if (!player) return null
           const st = getPlayerStats(allShots, player.id)
@@ -708,7 +709,7 @@ export default function SessionPage() {
               <div className="text-4xl mb-3">🗑️</div>
               <h2 className="font-heading text-2xl tracking-wider text-pool-chalk mb-1">DELETE SESSION</h2>
               <p className="font-body text-sm text-pool-chalk-dim">
-                {format(new Date(session.date + 'T12:00:00'), 'MMMM d, yyyy')} · {totalGames} games · {session.games.flatMap(g => g.shots).length} shots
+                {format(new Date(session.date + 'T12:00:00'), 'MMMM d, yyyy')} · {totalGames} games · {session.games.flatMap(g => g.shots ?? []).length} shots
               </p>
               <p className="font-body text-xs text-pool-red mt-2">This cannot be undone.</p>
             </div>

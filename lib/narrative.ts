@@ -5,13 +5,15 @@ export function generateNarrative(standings: StandingBasic[]): string {
     return 'No games played yet this season — tonight everything starts.'
   const sorted = [...standings].sort((a, b) => b.wins - a.wins)
   const [first, second, third] = sorted
+  if (!second)
+    return `${first.display_name} is leading the pack. Tonight could shake things up.`
   const gap12 = first.wins - second.wins
-  const gap23 = second.wins - third.wins
+  const gap23 = third ? second.wins - third.wins : 0
   if (gap12 === 0)
     return `${first.display_name} and ${second.display_name} are level at the top. Tonight could split them.`
   if (gap12 >= 4)
     return `${first.display_name} is pulling away with ${first.wins} wins. The others need a big night.`
-  if (gap12 === 1 && gap23 === 0)
+  if (gap12 === 1 && gap23 === 0 && third)
     return `${first.display_name} leads by one win. ${second.display_name} and ${third.display_name} are right behind.`
   if (gap12 === 1)
     return `${first.display_name} leads by a single win. One bad session and it's level again.`
