@@ -54,6 +54,6 @@ export function getSessionPrediction(
   if (!players.length) return null
   const h = sessionHash(sessionId)
   const winner = players[h % players.length]
-  const reason = REASONS[(h >> 5) % REASONS.length](winner.displayName)
+  const reason = REASONS[(h >>> 5) % REASONS.length](winner.displayName)
   return { username: winner.username, displayName: winner.displayName, reason }
 }
