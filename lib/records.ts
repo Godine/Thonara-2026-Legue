@@ -20,6 +20,7 @@ type RawShot = {
   potted: boolean
   balls_potted?: number
   opponent_balls_potted?: number
+  ball_color?: string | null
   is_lucky: boolean
   is_error: boolean
   shot_number: number

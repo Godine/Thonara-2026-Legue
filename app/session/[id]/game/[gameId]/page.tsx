@@ -60,7 +60,9 @@ export default function GamePage() {
   const [elapsed, setElapsed]           = useState(0)
   const [timerStarted, setTimerStarted] = useState(false)
   const [breaker, setBreaker]           = useState<string | null>(null)
-  const [breakPots, setBreakPots]       = useState(0)
+  const [breakYellows, setBreakYellows] = useState(0)
+  const [breakReds, setBreakReds]       = useState(0)
+  const [breakBlack, setBreakBlack]     = useState(false)
   const [potPopup, setPotPopup]         = useState<PotPopupState | null>(null)
   const prevCompleteRef   = useRef<boolean | undefined>(undefined)
   const timerStartRef     = useRef<number | null>(null)
@@ -156,6 +158,7 @@ export default function GamePage() {
       potted: isPotted,
       balls_potted: isPotted ? 1 : 0,
       opponent_balls_potted: 0,
+      ball_color: null,
       is_lucky: type === 'lucky',
       is_error: type === 'error',
       shot_number: newShotNumber,
@@ -168,6 +171,7 @@ export default function GamePage() {
       potted: isPotted,
       balls_potted: isPotted ? 1 : 0,
       opponent_balls_potted: 0,
+      ball_color: null,
       is_lucky: optimistic.is_lucky,
       is_error: optimistic.is_error,
       shot_number: newShotNumber,
@@ -191,6 +195,7 @@ export default function GamePage() {
       potted: ownBalls > 0,
       balls_potted: ownBalls,
       opponent_balls_potted: oppBalls,
+      ball_color: null,
       is_lucky: false,
       is_error: isFoul,
       shot_number: newShotNumber,
@@ -203,6 +208,7 @@ export default function GamePage() {
       potted: ownBalls > 0,
       balls_potted: ownBalls,
       opponent_balls_potted: oppBalls,
+      ball_color: null,
       is_lucky: false,
       is_error: isFoul,
       shot_number: newShotNumber,
@@ -240,24 +246,28 @@ export default function GamePage() {
   const recordBreak = async () => {
     if (!breaker || saving) return
     setSaving(true)
-    const rows = breakPots === 0
-      ? [{ game_id: gameId, player_id: breaker, potted: false, balls_potted: 0, opponent_balls_potted: 0, is_lucky: false, is_error: false, shot_number: 1 }]
-      : Array.from({ length: breakPots }, (_, i) => ({
-          game_id: gameId, player_id: breaker!,
-          potted: true, balls_potted: 1, opponent_balls_potted: 0,
-          is_lucky: false, is_error: false, shot_number: i + 1,
-        }))
+    const totalPots = breakYellows + breakReds + (breakBlack ? 1 : 0)
+    const rows: Parameters<typeof insertShots>[1] = []
+    let shotNum = 1
+    if (totalPots === 0) {
+      rows.push({ game_id: gameId, player_id: breaker, potted: false, balls_potted: 0, opponent_balls_potted: 0, ball_color: null, is_lucky: false, is_error: false, shot_number: shotNum++ })
+    } else {
+      for (let i = 0; i < breakYellows; i++)
+        rows.push({ game_id: gameId, player_id: breaker, potted: true, balls_potted: 1, opponent_balls_potted: 0, ball_color: 'yellow', is_lucky: false, is_error: false, shot_number: shotNum++ })
+      for (let i = 0; i < breakReds; i++)
+        rows.push({ game_id: gameId, player_id: breaker, potted: true, balls_potted: 1, opponent_balls_potted: 0, ball_color: 'red', is_lucky: false, is_error: false, shot_number: shotNum++ })
+      if (breakBlack)
+        rows.push({ game_id: gameId, player_id: breaker, potted: true, balls_potted: 1, opponent_balls_potted: 0, ball_color: 'black', is_lucky: false, is_error: false, shot_number: shotNum++ })
+    }
     const now = Date.now()
-    setShots(rows.map((r, i) => ({
-      id: `temp-${now}-${i}`,
-      created_at: new Date().toISOString(),
-      ...r,
-    })))
+    setShots(rows.map((r, i) => ({ id: `temp-${now}-${i}`, created_at: new Date().toISOString(), ...r })))
     await insertShots(db, rows)
-    haptic(breakPots > 0 ? [30, 15, 30] : 20)
+    haptic(totalPots > 0 ? [30, 15, 30] : 20)
     setSaving(false)
     setBreaker(null)
-    setBreakPots(0)
+    setBreakYellows(0)
+    setBreakReds(0)
+    setBreakBlack(false)
   }
 
   const undoLastShot = async () => {
@@ -356,14 +366,17 @@ export default function GamePage() {
     if (shots.length === 0) return null
     const sorted = [...shots].sort((a, b) => a.shot_number - b.shot_number)
     const breakerId = sorted[0].player_id
-    let pots = 0
+    let pots = 0, yellows = 0, reds = 0, black = false
     for (const s of sorted) {
       if (s.player_id !== breakerId) break
       const sp = s.balls_potted ?? (s.potted ? 1 : 0)
       if (sp === 0) break
       pots += sp
+      if (s.ball_color === 'yellow') yellows += sp
+      else if (s.ball_color === 'red') reds += sp
+      else if (s.ball_color === 'black') black = true
     }
-    return { pots, breakPlayer: breakerId === p1.id ? p1 : p2 }
+    return { pots, yellows, reds, black, breakPlayer: breakerId === p1.id ? p1 : p2 }
   })()
 
   const gameDuration = shots.length >= 2
@@ -523,9 +536,35 @@ export default function GamePage() {
                 <p className="font-heading text-xs tracking-widest text-pool-chalk-dim">BREAK</p>
                 <p className="font-body text-sm text-pool-chalk mt-0.5">{breakInfo.breakPlayer.display_name} broke</p>
               </div>
-              <p className="font-heading text-3xl" style={{ color: PLAYER_STYLES[breakInfo.breakPlayer.username as PlayerUsername]?.color }}>
-                {breakInfo.pots} {breakInfo.pots === 1 ? 'pot' : 'pots'}
-              </p>
+              <div className="flex items-center gap-3">
+                {breakInfo.pots === 0 ? (
+                  <p className="font-heading text-xl text-pool-chalk-dim">No pots</p>
+                ) : (
+                  <>
+                    {breakInfo.yellows > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3.5 h-3.5 rounded-full bg-yellow-400 shrink-0" />
+                        <span className="font-heading text-2xl text-pool-chalk">{breakInfo.yellows}</span>
+                      </div>
+                    )}
+                    {breakInfo.reds > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3.5 h-3.5 rounded-full bg-pool-red shrink-0" />
+                        <span className="font-heading text-2xl text-pool-chalk">{breakInfo.reds}</span>
+                      </div>
+                    )}
+                    {breakInfo.black && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3.5 h-3.5 rounded-full bg-pool-chalk shrink-0" />
+                        <span className="font-heading text-2xl text-pool-chalk">1</span>
+                      </div>
+                    )}
+                    {(breakInfo.yellows === 0 && breakInfo.reds === 0 && !breakInfo.black) && (
+                      <p className="font-heading text-2xl text-pool-chalk">{breakInfo.pots} {breakInfo.pots === 1 ? 'pot' : 'pots'}</p>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           )}
 
@@ -605,19 +644,41 @@ export default function GamePage() {
               </div>
 
               {breaker && (
-                <div className="bg-pool-surface border border-pool-border rounded-2xl p-4 mb-4">
-                  <p className="font-body text-xs text-pool-chalk-dim mb-3 text-center">Pots on break</p>
-                  <div className="flex items-center justify-center gap-8">
-                    <button
-                      onClick={() => setBreakPots(p => Math.max(0, p - 1))}
-                      className="w-11 h-11 rounded-xl border border-pool-border font-heading text-2xl text-pool-chalk-dim hover:border-pool-chalk/40 hover:text-pool-chalk transition-all active:scale-90"
-                    >−</button>
-                    <span className="font-heading text-5xl text-pool-chalk w-12 text-center tabular-nums">{breakPots}</span>
-                    <button
-                      onClick={() => setBreakPots(p => Math.min(6, p + 1))}
-                      className="w-11 h-11 rounded-xl border border-pool-border font-heading text-2xl text-pool-chalk-dim hover:border-pool-chalk/40 hover:text-pool-chalk transition-all active:scale-90"
-                    >+</button>
-                  </div>
+                <div className="bg-pool-surface border border-pool-border rounded-2xl p-4 mb-4 space-y-3">
+                  <p className="font-body text-xs text-pool-chalk-dim text-center">Balls potted on break</p>
+
+                  {/* Yellows */}
+                  {([
+                    { label: 'Yellows', color: '#facc15', count: breakYellows, setCount: setBreakYellows },
+                    { label: 'Reds',    color: '#ef4444', count: breakReds,    setCount: setBreakReds    },
+                  ] as const).map(({ label, color, count, setCount }) => (
+                    <div key={label} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                        <span className="font-body text-sm text-pool-chalk">{label}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={() => setCount(p => Math.max(0, p - 1))}
+                          className="w-9 h-9 rounded-lg border border-pool-border font-heading text-xl text-pool-chalk-dim hover:border-pool-chalk/40 hover:text-pool-chalk transition-all active:scale-90"
+                        >−</button>
+                        <span className="font-heading text-2xl text-pool-chalk w-5 text-center tabular-nums">{count}</span>
+                        <button
+                          onClick={() => setCount(p => Math.min(7, p + 1))}
+                          className="w-9 h-9 rounded-lg border border-pool-border font-heading text-xl text-pool-chalk-dim hover:border-pool-chalk/40 hover:text-pool-chalk transition-all active:scale-90"
+                        >+</button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Black */}
+                  <button
+                    onClick={() => setBreakBlack(b => !b)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all ${breakBlack ? 'border-pool-chalk/50 bg-pool-chalk/10 text-pool-chalk' : 'border-pool-border text-pool-chalk-dim'}`}
+                  >
+                    <div className={`w-4 h-4 rounded-full border-2 shrink-0 transition-all ${breakBlack ? 'bg-pool-chalk border-pool-chalk' : 'border-pool-chalk-dim'}`} />
+                    <span className="font-body text-sm">Black ball potted</span>
+                  </button>
                 </div>
               )}
 

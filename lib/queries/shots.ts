@@ -15,7 +15,7 @@ export async function fetchShotsForGame(db: SupabaseClient, gameId: string): Pro
 export async function fetchAllShots(db: SupabaseClient): Promise<Shot[]> {
   const { data } = await db
     .from('shots')
-    .select('id, game_id, player_id, potted, balls_potted, opponent_balls_potted, is_lucky, is_error, shot_number, created_at')
+    .select('id, game_id, player_id, potted, balls_potted, opponent_balls_potted, ball_color, is_lucky, is_error, shot_number, created_at')
   return (data as Shot[]) ?? []
 }
 
