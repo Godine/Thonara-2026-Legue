@@ -30,6 +30,12 @@ interface EndGameState {
   blackBall: boolean
 }
 
+interface PotPopupState {
+  playerId: string
+  ownBalls: number
+  oppBalls: number
+}
+
 export default function GamePage() {
   const { id: sessionId, gameId } = useParams<{ id: string; gameId: string }>()
   const router = useRouter()
@@ -55,8 +61,11 @@ export default function GamePage() {
   const [timerStarted, setTimerStarted] = useState(false)
   const [breaker, setBreaker]           = useState<string | null>(null)
   const [breakPots, setBreakPots]       = useState(0)
-  const prevCompleteRef = useRef<boolean | undefined>(undefined)
-  const timerStartRef   = useRef<number | null>(null)
+  const [potPopup, setPotPopup]         = useState<PotPopupState | null>(null)
+  const prevCompleteRef   = useRef<boolean | undefined>(undefined)
+  const timerStartRef     = useRef<number | null>(null)
+  const longPressTimer    = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressTriggered = useRef(false)
 
   const loadGame = useCallback(async () => {
     const [gameData, shotsData] = await Promise.all([
@@ -79,7 +88,6 @@ export default function GamePage() {
     return () => { db.removeChannel(channel) }
   }, [gameId, loadGame]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch historical shot accuracy + H2H in parallel (once per game/players combo)
   useEffect(() => {
     if (!game) return
     const p1id = game.player1.id
@@ -92,14 +100,13 @@ export default function GamePage() {
       for (const s of shotsData) {
         if (!acc[s.player_id]) acc[s.player_id] = { shots: 0, potted: 0 }
         acc[s.player_id].shots++
-        if (s.potted) acc[s.player_id].potted++
+        acc[s.player_id].potted += s.balls_potted ?? (s.potted ? 1 : 0)
       }
       setHistStats(acc)
       setH2hStats(h2h)
     })
   }, [game?.player1.id, game?.player2.id, gameId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Show win celebration when game transitions from in-progress to complete
   useEffect(() => {
     if (game?.is_complete && prevCompleteRef.current === false) {
       setShowCelebration(true)
@@ -107,7 +114,6 @@ export default function GamePage() {
     prevCompleteRef.current = game?.is_complete ?? false
   }, [game?.is_complete])
 
-  // Set timer start from first shot timestamp
   useEffect(() => {
     if (shots.length > 0 && !timerStarted) {
       timerStartRef.current = new Date(shots[0].created_at).getTime()
@@ -115,7 +121,6 @@ export default function GamePage() {
     }
   }, [shots, timerStarted])
 
-  // Tick timer while game is in progress
   useEffect(() => {
     if (!timerStarted || game?.is_complete) return
     const tick = () => setElapsed(Math.floor((Date.now() - timerStartRef.current!) / 1000))
@@ -142,12 +147,15 @@ export default function GamePage() {
       error:  [20, 10, 20],
     }
     haptic(hapticPatterns[type])
+    const isPotted = type === 'potted' || type === 'lucky'
     const newShotNumber = shots.length + 1
     const optimistic: Shot = {
       id: `temp-${Date.now()}`,
       game_id: gameId,
       player_id: playerId,
-      potted: type === 'potted' || type === 'lucky',
+      potted: isPotted,
+      balls_potted: isPotted ? 1 : 0,
+      opponent_balls_potted: 0,
       is_lucky: type === 'lucky',
       is_error: type === 'error',
       shot_number: newShotNumber,
@@ -157,7 +165,9 @@ export default function GamePage() {
     await insertShot(db, {
       game_id: gameId,
       player_id: playerId,
-      potted: optimistic.potted,
+      potted: isPotted,
+      balls_potted: isPotted ? 1 : 0,
+      opponent_balls_potted: 0,
       is_lucky: optimistic.is_lucky,
       is_error: optimistic.is_error,
       shot_number: newShotNumber,
@@ -165,14 +175,77 @@ export default function GamePage() {
     setSaving(false)
   }
 
+  const recordMultiPot = async (playerId: string, ownBalls: number, oppBalls: number) => {
+    if (!canEdit || saving) return
+    setPotPopup(null)
+    setSaving(true)
+    const isFoul = oppBalls > 0
+    setFlash({ playerId, type: isFoul ? 'error' : 'potted' })
+    setTimeout(() => setFlash(null), 350)
+    haptic(isFoul ? [20, 10, 20] : ownBalls > 1 ? [40, 15, 40] : 40)
+    const newShotNumber = shots.length + 1
+    const optimistic: Shot = {
+      id: `temp-${Date.now()}`,
+      game_id: gameId,
+      player_id: playerId,
+      potted: ownBalls > 0,
+      balls_potted: ownBalls,
+      opponent_balls_potted: oppBalls,
+      is_lucky: false,
+      is_error: isFoul,
+      shot_number: newShotNumber,
+      created_at: new Date().toISOString(),
+    }
+    setShots(prev => [...prev, optimistic])
+    await insertShot(db, {
+      game_id: gameId,
+      player_id: playerId,
+      potted: ownBalls > 0,
+      balls_potted: ownBalls,
+      opponent_balls_potted: oppBalls,
+      is_lucky: false,
+      is_error: isFoul,
+      shot_number: newShotNumber,
+    })
+    setSaving(false)
+  }
+
+  const handlePotPressStart = (playerId: string) => {
+    if (!canEdit || saving) return
+    longPressTriggered.current = false
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true
+      haptic([10, 5, 20])
+      setPotPopup({ playerId, ownBalls: 1, oppBalls: 0 })
+    }, 400)
+  }
+
+  const handlePotPressEnd = (playerId: string) => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+    if (!longPressTriggered.current) {
+      recordShot(playerId, 'potted')
+    }
+  }
+
+  const handlePotPressCancel = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
+
   const recordBreak = async () => {
     if (!breaker || saving) return
     setSaving(true)
     const rows = breakPots === 0
-      ? [{ game_id: gameId, player_id: breaker, potted: false, is_lucky: false, is_error: false, shot_number: 1 }]
+      ? [{ game_id: gameId, player_id: breaker, potted: false, balls_potted: 0, opponent_balls_potted: 0, is_lucky: false, is_error: false, shot_number: 1 }]
       : Array.from({ length: breakPots }, (_, i) => ({
           game_id: gameId, player_id: breaker!,
-          potted: true, is_lucky: false, is_error: false, shot_number: i + 1,
+          potted: true, balls_potted: 1, opponent_balls_potted: 0,
+          is_lucky: false, is_error: false, shot_number: i + 1,
         }))
     const now = Date.now()
     setShots(rows.map((r, i) => ({
@@ -260,10 +333,12 @@ export default function GamePage() {
   const p1Stats = getPlayerStats(shots, p1.id)
   const p2Stats = getPlayerStats(shots, p2.id)
 
-  // Whose turn: pot keeps the shooter's turn, miss/error switches it
-  const isP1Turn = shots.length === 0
-    ? true
-    : (shots[shots.length - 1].player_id === p1.id) === shots[shots.length - 1].potted
+  // Whose turn: pot (no foul) keeps the shooter's turn, miss/error/foul switches it
+  const lastShot = shots.length > 0 ? shots[shots.length - 1] : null
+  const lastShotPotted = lastShot
+    ? ((lastShot.balls_potted ?? (lastShot.potted ? 1 : 0)) > 0) && !lastShot.is_error
+    : false
+  const isP1Turn = !lastShot ? true : (lastShot.player_id === p1.id) === lastShotPotted
 
   const odds = computeOdds(
     shots, p1.id, p2.id,
@@ -284,13 +359,13 @@ export default function GamePage() {
     let pots = 0
     for (const s of sorted) {
       if (s.player_id !== breakerId) break
-      if (!s.potted) break
-      pots++
+      const sp = s.balls_potted ?? (s.potted ? 1 : 0)
+      if (sp === 0) break
+      pots += sp
     }
     return { pots, breakPlayer: breakerId === p1.id ? p1 : p2 }
   })()
 
-  // Game duration: last shot timestamp minus first shot timestamp
   const gameDuration = shots.length >= 2
     ? Math.floor(
         (new Date(shots[shots.length - 1].created_at).getTime() - new Date(shots[0].created_at).getTime()) / 1000
@@ -374,7 +449,7 @@ export default function GamePage() {
               {stats.shots > 0 && (
                 <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
                   <div className="h-full rounded-full transition-all duration-300"
-                    style={{ width: `${Math.round((stats.potted / stats.shots) * 100)}%`, backgroundColor: style?.color }} />
+                    style={{ width: `${Math.round((stats.ownPotted / stats.shots) * 100)}%`, backgroundColor: style?.color }} />
                 </div>
               )}
               {!game.is_complete && (p1Stats.shots + p2Stats.shots > 0 || Object.keys(histStats).length > 0) && (
@@ -501,7 +576,6 @@ export default function GamePage() {
             <div className="flex-1 flex flex-col">
               <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">WHO BROKE?</p>
 
-              {/* Coin flip shortcut */}
               <Link
                 href={`/coin?p1=${p1.username}&p2=${p2.username}&back=/session/${game.session_id}/game/${game.id}`}
                 className="flex items-center justify-center gap-2 mb-4 py-2.5 rounded-xl border border-pool-border text-pool-chalk-dim font-body text-sm hover:text-pool-chalk hover:border-pool-chalk/30 transition-all"
@@ -560,7 +634,9 @@ export default function GamePage() {
 
             /* Regular shot buttons */
             <>
-              <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">TAP TO RECORD A SHOT</p>
+              <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">
+                TAP TO RECORD · HOLD POT FOR MULTI-BALL
+              </p>
               <div className="grid grid-cols-2 gap-3 flex-1">
                 {[{ player: p1, style: p1Style }, { player: p2, style: p2Style }].map(({ player, style }) => {
                   const isFlashing = flash?.playerId === player.id
@@ -571,17 +647,32 @@ export default function GamePage() {
                           {player.display_name.toUpperCase()}
                         </span>
                       </div>
-                      {shotButtons.map(btn => (
-                        <button
-                          key={btn.type}
-                          onClick={() => recordShot(player.id, btn.type)}
-                          disabled={saving}
-                          className={`shot-btn w-full py-4 rounded-xl border font-heading text-lg tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-50 ${btn.classes}`}
-                        >
-                          <span>{btn.icon}</span>
-                          <span>{btn.label}</span>
-                        </button>
-                      ))}
+                      {shotButtons.map(btn =>
+                        btn.type === 'potted' ? (
+                          <button
+                            key={btn.type}
+                            onPointerDown={() => handlePotPressStart(player.id)}
+                            onPointerUp={() => handlePotPressEnd(player.id)}
+                            onPointerLeave={handlePotPressCancel}
+                            onPointerCancel={handlePotPressCancel}
+                            disabled={saving}
+                            className={`shot-btn w-full py-4 rounded-xl border font-heading text-lg tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-50 select-none ${btn.classes}`}
+                          >
+                            <span>{btn.icon}</span>
+                            <span>{btn.label}</span>
+                          </button>
+                        ) : (
+                          <button
+                            key={btn.type}
+                            onClick={() => recordShot(player.id, btn.type)}
+                            disabled={saving}
+                            className={`shot-btn w-full py-4 rounded-xl border font-heading text-lg tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-50 ${btn.classes}`}
+                          >
+                            <span>{btn.icon}</span>
+                            <span>{btn.label}</span>
+                          </button>
+                        )
+                      )}
                     </div>
                   )
                 })}
@@ -634,8 +725,15 @@ export default function GamePage() {
             {shots.slice(-5).reverse().map((shot, i) => {
               const shooter = shot.player_id === p1.id ? p1 : p2
               const shooterStyle = shot.player_id === p1.id ? p1Style : p2Style
-              const label = shot.is_error ? '⚠ Error' : shot.is_lucky ? '★ Lucky' : shot.potted ? '● Potted' : '✕ Miss'
-              const color = shot.is_error ? '#ef4444' : shot.is_lucky ? '#c9a227' : shot.potted ? '#22c55e' : '#7a786f'
+              const shotBalls = shot.balls_potted ?? (shot.potted ? 1 : 0)
+              const oppBalls = shot.opponent_balls_potted ?? 0
+              const label = shot.is_error
+                ? oppBalls > 0 ? `⚠ Foul (+${oppBalls} opp)` : '⚠ Error'
+                : shot.is_lucky ? '★ Lucky'
+                : shotBalls > 1 ? `● ×${shotBalls}`
+                : shotBalls === 1 ? '● Potted'
+                : '✕ Miss'
+              const color = shot.is_error ? '#ef4444' : shot.is_lucky ? '#c9a227' : shotBalls > 0 ? '#22c55e' : '#7a786f'
               return (
                 <div key={shot.id} className={`flex items-center gap-3 px-4 py-2 ${i === 0 ? 'bg-pool-border/20' : ''}`}>
                   <span className="font-body text-xs text-pool-chalk-dim w-6">#{shot.shot_number}</span>
@@ -644,6 +742,74 @@ export default function GamePage() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Multi-ball pot popup */}
+      {potPopup && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in"
+          onClick={() => setPotPopup(null)}
+        >
+          <div
+            className="w-full max-w-lg bg-pool-surface rounded-t-3xl border-t border-pool-border p-6 animate-slide-up"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="font-heading text-2xl tracking-wider text-pool-chalk text-center mb-6">HOW MANY BALLS?</h2>
+
+            <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-2">Your balls</p>
+            <div className="flex gap-3 mb-5">
+              {[1, 2, 3].map(n => (
+                <button
+                  key={n}
+                  onClick={() => setPotPopup(p => p ? { ...p, ownBalls: n } : p)}
+                  className={`flex-1 py-4 rounded-xl border-2 font-heading text-2xl transition-all active:scale-95 ${
+                    potPopup.ownBalls === n
+                      ? 'border-green-500 bg-green-500/20 text-green-400'
+                      : 'border-pool-border text-pool-chalk-dim hover:border-green-500/40'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+
+            <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-2">Opponent's balls (foul pot)</p>
+            <div className="flex gap-3 mb-5">
+              {[0, 1, 2].map(n => (
+                <button
+                  key={n}
+                  onClick={() => setPotPopup(p => p ? { ...p, oppBalls: n } : p)}
+                  className={`flex-1 py-4 rounded-xl border-2 font-heading text-2xl transition-all active:scale-95 ${
+                    potPopup.oppBalls === n
+                      ? 'border-red-500 bg-red-500/20 text-red-400'
+                      : 'border-pool-border text-pool-chalk-dim hover:border-red-500/40'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+
+            {potPopup.oppBalls > 0 && (
+              <p className="text-xs font-body text-pool-red text-center mb-4">⚠ Foul — marked as an error, ball credited to opponent</p>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPotPopup(null)}
+                className="flex-1 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-wider text-pool-chalk-dim hover:text-pool-chalk transition-all"
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={() => recordMultiPot(potPopup.playerId, potPopup.ownBalls, potPopup.oppBalls)}
+                className="flex-1 py-4 rounded-xl bg-pool-green-bright text-pool-bg font-heading text-lg tracking-widest hover:brightness-110 transition-all active:scale-[0.98]"
+              >
+                CONFIRM
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -752,7 +918,7 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* Win celebration overlay — dismissing reveals the recap below */}
+      {/* Win celebration overlay */}
       {showCelebration && game.winner && (
         <WinCelebration
           winner={game.winner}
@@ -776,7 +942,6 @@ export default function GamePage() {
             </div>
 
             <div className="px-6 py-4 space-y-6">
-              {/* Change winner */}
               <div>
                 <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3">CHANGE WINNER</p>
                 <div className="grid grid-cols-2 gap-2 mb-3">
@@ -807,7 +972,6 @@ export default function GamePage() {
                 </button>
               </div>
 
-              {/* Shot log with delete */}
               {shots.length > 0 && (
                 <div>
                   <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3">
@@ -817,8 +981,15 @@ export default function GamePage() {
                     {[...shots].sort((a, b) => a.shot_number - b.shot_number).map(s => {
                       const shooter = s.player_id === p1.id ? p1 : p2
                       const shooterStyle = PLAYER_STYLES[shooter.username as PlayerUsername]
-                      const label = s.is_error ? 'Error' : s.is_lucky ? 'Lucky' : s.potted ? 'Potted' : 'Miss'
-                      const labelColor = s.is_error ? '#ef4444' : s.is_lucky ? '#c9a227' : s.potted ? '#22c55e' : '#7a786f'
+                      const shotBalls = s.balls_potted ?? (s.potted ? 1 : 0)
+                      const oppBalls = s.opponent_balls_potted ?? 0
+                      const label = s.is_error
+                        ? oppBalls > 0 ? `Foul (+${oppBalls} opp)` : 'Error'
+                        : s.is_lucky ? 'Lucky'
+                        : shotBalls > 1 ? `×${shotBalls} Pots`
+                        : shotBalls === 1 ? 'Potted'
+                        : 'Miss'
+                      const labelColor = s.is_error ? '#ef4444' : s.is_lucky ? '#c9a227' : shotBalls > 0 ? '#22c55e' : '#7a786f'
                       return (
                         <div key={s.id} className="flex items-center gap-3 px-3 py-2">
                           <span className="font-body text-xs text-pool-chalk-dim w-6 text-right shrink-0">#{s.shot_number}</span>
@@ -835,7 +1006,6 @@ export default function GamePage() {
                 </div>
               )}
 
-              {/* Danger zone */}
               <div className="border border-pool-red/30 rounded-xl p-4 space-y-2">
                 <p className="font-heading text-xs tracking-widest text-pool-red mb-3">DANGER ZONE</p>
                 {game.is_complete && (
@@ -876,7 +1046,7 @@ export default function GamePage() {
             <div className="w-full grid grid-cols-2 gap-3 pt-2 border-t border-pool-border">
               {[game.player1, game.player2].map(pl => {
                 const st = getPlayerStats(shots, pl.id)
-                const acc = st.shots > 0 ? Math.round((st.potted / st.shots) * 100) : 0
+                const acc = st.shots > 0 ? Math.round((st.ownPotted / st.shots) * 100) : 0
                 const plStyle = PLAYER_STYLES[pl.username as PlayerUsername]
                 const isWinner = pl.id === game.winner_id
                 return (

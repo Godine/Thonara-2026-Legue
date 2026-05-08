@@ -18,6 +18,8 @@ type RawShot = {
   game_id: string
   player_id: string
   potted: boolean
+  balls_potted?: number
+  opponent_balls_potted?: number
   is_lucky: boolean
   is_error: boolean
   shot_number: number
@@ -122,14 +124,15 @@ export function computeRecords(games: RawGame[], shots: RawShot[]): RecordSectio
 
   const mostCareerPots = pickRecord(PLAYERS.map(u => {
     const pid = userToId.get(u) ?? ''
-    return { username: u, value: shots.filter(s => s.player_id === pid && s.potted).length }
+    return { username: u, value: shots.filter(s => s.player_id === pid).reduce((sum, s) => sum + (s.balls_potted ?? (s.potted ? 1 : 0)), 0) }
   }), v => `${v}`)
 
   const bestCareerAcc = pickRecord(PLAYERS.map(u => {
     const pid = userToId.get(u) ?? ''
     const ps = shots.filter(s => s.player_id === pid)
     if (ps.length < 30) return { username: u, value: 0 }
-    return { username: u, value: Math.round((ps.filter(s => s.potted).length / ps.length) * 100) }
+    const totalPotted = ps.reduce((sum, s) => sum + (s.balls_potted ?? (s.potted ? 1 : 0)), 0)
+    return { username: u, value: Math.round((totalPotted / ps.length) * 100) }
   }), v => `${v}%`)
 
   const mostBlackBallWins = pickRecord(PLAYERS.map(u => {
@@ -149,7 +152,7 @@ export function computeRecords(games: RawGame[], shots: RawShot[]): RecordSectio
       const u = idToUser.get(pid)
       if (!u) continue
       const gs = (shotsByGame.get(g.id) ?? []).filter(s => s.player_id === pid)
-      const pots = gs.filter(s => s.potted).length
+      const pots = gs.reduce((sum, s) => sum + (s.balls_potted ?? (s.potted ? 1 : 0)), 0)
       const ctx = oppLabel(pid, g)
 
       gameShotsPerPlayer.push({ username: u, value: gs.length, context: ctx })
@@ -212,8 +215,10 @@ export function computeRecords(games: RawGame[], shots: RawShot[]): RecordSectio
     if (!u) continue
     let pots = 0
     for (const s of gs) {
-      if (s.player_id !== breakerId || !s.potted) break
-      pots++
+      if (s.player_id !== breakerId) break
+      const sp = s.balls_potted ?? (s.potted ? 1 : 0)
+      if (sp === 0) break
+      pots += sp
     }
     if (pots > 0) breakCandidates.push({ username: u, value: pots, context: oppLabel(breakerId, g) })
   }

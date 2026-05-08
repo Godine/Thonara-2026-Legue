@@ -10,8 +10,8 @@ export function pickTrashTalk(
   loserPottedBlack: boolean,
 ): string {
   const lines: string[] = []
-  const wAcc = wStats.shots > 0 ? Math.round((wStats.potted / wStats.shots) * 100) : 0
-  const lAcc = lStats.shots > 0 ? Math.round((lStats.potted / lStats.shots) * 100) : 0
+  const wAcc = wStats.shots > 0 ? Math.round((wStats.ownPotted / wStats.shots) * 100) : 0
+  const lAcc = lStats.shots > 0 ? Math.round((lStats.ownPotted / lStats.shots) * 100) : 0
   const wName = winner.display_name
   const lName = loser.display_name
 
@@ -29,7 +29,7 @@ export function pickTrashTalk(
     lines.push(`${lAcc}% accuracy, ${lName}? The pockets were right there. Just saying. 👀`)
   if (wStats.shots > 0 && lStats.shots > 0 && wStats.shots < lStats.shots * 0.6)
     lines.push(`${wName} needed ${wStats.shots} shots. ${lName} needed ${lStats.shots}. Let that sink in. ⏱️`)
-  if (lStats.potted === 0 && lStats.shots >= 3)
+  if (lStats.ownPotted === 0 && lStats.shots >= 3)
     lines.push(`${lStats.shots} shots. Zero pots. ${lName}, the table called — it wants a break. 😭`)
 
   if (lines.length === 0) {

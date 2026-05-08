@@ -15,7 +15,7 @@ export async function fetchShotsForGame(db: SupabaseClient, gameId: string): Pro
 export async function fetchAllShots(db: SupabaseClient): Promise<Shot[]> {
   const { data } = await db
     .from('shots')
-    .select('id, game_id, player_id, potted, is_lucky, is_error, shot_number, created_at')
+    .select('id, game_id, player_id, potted, balls_potted, opponent_balls_potted, is_lucky, is_error, shot_number, created_at')
   return (data as Shot[]) ?? []
 }
 
@@ -23,13 +23,13 @@ export async function fetchHistoricalShots(
   db: SupabaseClient,
   playerIds: string[],
   excludeGameId: string,
-): Promise<{ player_id: string; potted: boolean }[]> {
+): Promise<{ player_id: string; potted: boolean; balls_potted: number }[]> {
   const { data } = await db
     .from('shots')
-    .select('player_id, potted')
+    .select('player_id, potted, balls_potted')
     .in('player_id', playerIds)
     .neq('game_id', excludeGameId)
-  return (data as { player_id: string; potted: boolean }[]) ?? []
+  return (data as { player_id: string; potted: boolean; balls_potted: number }[]) ?? []
 }
 
 export async function insertShot(db: SupabaseClient, shot: ShotInsert) {

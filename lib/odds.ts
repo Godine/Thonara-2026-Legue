@@ -8,7 +8,7 @@ export function weightedAccuracy(shots: Shot[], playerId: string, decay = 0.8): 
   const n = mine.length
   for (let i = 0; i < n; i++) {
     const w = Math.pow(decay, n - 1 - i) // most recent = weight 1, older = smaller
-    wPots  += w * (mine[i].potted ? 1 : 0)
+    wPots  += w * ((mine[i].balls_potted ?? (mine[i].potted ? 1 : 0)) > 0 ? 1 : 0)
     wTotal += w
   }
   return wPots / wTotal

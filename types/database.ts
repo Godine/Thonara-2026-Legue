@@ -38,6 +38,8 @@ export interface Shot {
   game_id: string
   player_id: string
   potted: boolean
+  balls_potted: number
+  opponent_balls_potted: number
   is_lucky: boolean
   is_error: boolean
   shot_number: number

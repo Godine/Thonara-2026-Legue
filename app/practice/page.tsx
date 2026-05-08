@@ -36,7 +36,8 @@ function getStats(shots: PracticeShot[], playerId: PlayerUsername) {
 function toShot(ps: PracticeShot, index: number): Shot {
   return {
     id: ps.id, game_id: 'practice', player_id: ps.playerId,
-    potted: ps.potted, is_lucky: ps.isLucky, is_error: ps.isError,
+    potted: ps.potted, balls_potted: ps.potted ? 1 : 0, opponent_balls_potted: 0,
+    is_lucky: ps.isLucky, is_error: ps.isError,
     shot_number: index + 1, created_at: '',
   }
 }

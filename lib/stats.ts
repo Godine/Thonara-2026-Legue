@@ -2,16 +2,21 @@ import type { Shot } from '@/types/database'
 
 export interface PlayerStats {
   shots: number
-  potted: number
+  potted: number     // total balls credited (own shots + opponent's foul-credited balls)
+  ownPotted: number  // balls potted from own shots only (for accuracy calculations)
   lucky: number
   errors: number
 }
 
 export function getPlayerStats(shots: Shot[], playerId: string): PlayerStats {
   const mine = shots.filter(s => s.player_id === playerId)
+  const theirs = shots.filter(s => s.player_id !== playerId)
+  const ownPotted = mine.reduce((sum, s) => sum + (s.balls_potted ?? (s.potted ? 1 : 0)), 0)
+  const credited = theirs.reduce((sum, s) => sum + (s.opponent_balls_potted ?? 0), 0)
   return {
     shots: mine.length,
-    potted: mine.filter(s => s.potted).length,
+    potted: ownPotted + credited,
+    ownPotted,
     lucky: mine.filter(s => s.is_lucky).length,
     errors: mine.filter(s => s.is_error).length,
   }
