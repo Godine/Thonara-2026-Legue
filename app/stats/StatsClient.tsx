@@ -29,6 +29,8 @@ interface RawShot {
   game_id: string
   player_id: string
   potted: boolean
+  balls_potted?: number
+  ball_color?: string | null
   is_lucky: boolean
   is_error: boolean
   shot_number: number
@@ -165,6 +167,23 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
     breakStats[breakerUsername].games++
     breakStats[breakerUsername].best = Math.max(breakStats[breakerUsername].best, pots)
   }
+
+  // ── Ball Colors ─────────────────────────────────────────────────────────────
+  const ballColorStats: Record<PlayerUsername, { yellows: number; reds: number }> = {
+    adib:   { yellows: 0, reds: 0 },
+    ahmed:  { yellows: 0, reds: 0 },
+    godine: { yellows: 0, reds: 0 },
+  }
+  for (const shot of shots) {
+    const username = idToUsername[shot.player_id]
+    if (!username || !ballColorStats[username]) continue
+    const count = shot.balls_potted ?? (shot.potted ? 1 : 0)
+    if (shot.ball_color === 'yellow') ballColorStats[username].yellows += count
+    else if (shot.ball_color === 'red') ballColorStats[username].reds += count
+  }
+  const totalYellows = PLAYERS.reduce((s, u) => s + ballColorStats[u].yellows, 0)
+  const totalReds = PLAYERS.reduce((s, u) => s + ballColorStats[u].reds, 0)
+  const hasColorData = totalYellows + totalReds > 0
 
   const standings = PLAYERS
     .map(u => playerMap[u])
@@ -662,6 +681,66 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
                 <p className="font-body text-xs text-pool-chalk-dim mb-1">Longest</p>
                 <p className="font-heading text-xl text-pool-gold tabular-nums">{maxDuration != null ? formatTime(maxDuration) : '—'}</p>
               </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── BALL COLORS ─────────────────────────────────────────────── */}
+      {hasColorData && (
+        <section className="px-4 py-2">
+          <SectionHeader title="BALL COLORS" sub="pots by colour" />
+          <div className="bg-pool-surface rounded-2xl border border-pool-border p-4 mt-3 space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 flex-1">
+                <div className="w-3 h-3 rounded-full bg-yellow-400 shrink-0" />
+                <span className="font-body text-sm text-pool-chalk-dim">Yellows</span>
+                <span className="font-heading text-xl text-pool-chalk ml-auto">{totalYellows}</span>
+              </div>
+              <div className="w-px h-6 bg-pool-border shrink-0" />
+              <div className="flex items-center gap-2 flex-1">
+                <div className="w-3 h-3 rounded-full bg-red-500 shrink-0" />
+                <span className="font-body text-sm text-pool-chalk-dim">Reds</span>
+                <span className="font-heading text-xl text-pool-chalk ml-auto">{totalReds}</span>
+              </div>
+            </div>
+            <div className="h-2 bg-pool-border rounded-full overflow-hidden flex">
+              <div className="h-full bg-yellow-400 transition-all duration-700"
+                style={{ width: `${Math.round((totalYellows / (totalYellows + totalReds)) * 100)}%` }} />
+              <div className="h-full flex-1 bg-red-500" />
+            </div>
+            <div className="space-y-3 pt-1">
+              {PLAYERS.map(u => {
+                const bc = ballColorStats[u]
+                const total = bc.yellows + bc.reds
+                if (total === 0) return null
+                const style = PLAYER_STYLES[u]
+                const favYellow = bc.yellows >= bc.reds
+                return (
+                  <div key={u}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <PlayerAvatar username={u} size={22} />
+                      <span className="font-heading text-xs tracking-wider" style={{ color: style.color }}>
+                        {style.label.toUpperCase()}
+                      </span>
+                      <span className="ml-auto font-body text-xs text-pool-chalk-dim flex items-center gap-1.5">
+                        Fav:
+                        <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: favYellow ? '#facc15' : '#ef4444' }} />
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-body text-xs text-yellow-400 w-10">{bc.yellows} 🟡</span>
+                      <div className="flex-1 h-1.5 bg-pool-border rounded-full overflow-hidden flex">
+                        {total > 0 && (
+                          <div className="h-full bg-yellow-400" style={{ width: `${Math.round((bc.yellows / total) * 100)}%` }} />
+                        )}
+                        <div className="h-full flex-1 bg-red-500" />
+                      </div>
+                      <span className="font-body text-xs text-red-400 w-10 text-right">{bc.reds} 🔴</span>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </section>

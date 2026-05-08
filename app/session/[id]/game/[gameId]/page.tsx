@@ -64,6 +64,7 @@ export default function GamePage() {
   const [breakReds, setBreakReds]       = useState(0)
   const [breakBlack, setBreakBlack]     = useState(false)
   const [potPopup, setPotPopup]         = useState<PotPopupState | null>(null)
+  const [colorAssignment, setColorAssignment] = useState<Record<string, 'yellow' | 'red'> | null>(null)
   const prevCompleteRef   = useRef<boolean | undefined>(undefined)
   const timerStartRef     = useRef<number | null>(null)
   const longPressTimer    = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -131,6 +132,16 @@ export default function GamePage() {
     return () => clearInterval(id)
   }, [timerStarted, game?.is_complete])
 
+  useEffect(() => {
+    if (colorAssignment !== null || shots.length === 0 || !game) return
+    const coloredShot = shots.find(s => s.ball_color === 'yellow' || s.ball_color === 'red')
+    if (!coloredShot) return
+    const pid = coloredShot.player_id
+    const color = coloredShot.ball_color as 'yellow' | 'red'
+    const otherId = pid === game.player1_id ? game.player2_id : game.player1_id
+    setColorAssignment({ [pid]: color, [otherId]: color === 'yellow' ? 'red' : 'yellow' })
+  }, [shots, game?.player1_id, game?.player2_id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const haptic = (pattern: number | number[]) => {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(pattern)
   }
@@ -158,7 +169,7 @@ export default function GamePage() {
       potted: isPotted,
       balls_potted: isPotted ? 1 : 0,
       opponent_balls_potted: 0,
-      ball_color: null,
+      ball_color: (isPotted && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
       is_lucky: type === 'lucky',
       is_error: type === 'error',
       shot_number: newShotNumber,
@@ -171,7 +182,7 @@ export default function GamePage() {
       potted: isPotted,
       balls_potted: isPotted ? 1 : 0,
       opponent_balls_potted: 0,
-      ball_color: null,
+      ball_color: (isPotted && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
       is_lucky: optimistic.is_lucky,
       is_error: optimistic.is_error,
       shot_number: newShotNumber,
@@ -195,7 +206,7 @@ export default function GamePage() {
       potted: ownBalls > 0,
       balls_potted: ownBalls,
       opponent_balls_potted: oppBalls,
-      ball_color: null,
+      ball_color: (ownBalls > 0 && !isFoul && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
       is_lucky: false,
       is_error: isFoul,
       shot_number: newShotNumber,
@@ -208,7 +219,7 @@ export default function GamePage() {
       potted: ownBalls > 0,
       balls_potted: ownBalls,
       opponent_balls_potted: oppBalls,
-      ball_color: null,
+      ball_color: (ownBalls > 0 && !isFoul && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
       is_lucky: false,
       is_error: isFoul,
       shot_number: newShotNumber,
@@ -264,6 +275,14 @@ export default function GamePage() {
     await insertShots(db, rows)
     haptic(totalPots > 0 ? [30, 15, 30] : 20)
     setSaving(false)
+    if (game) {
+      const otherId = game.player1_id === breaker ? game.player2_id : game.player1_id
+      if (breakYellows > 0 && breakReds === 0) {
+        setColorAssignment({ [breaker]: 'yellow', [otherId]: 'red' })
+      } else if (breakReds > 0 && breakYellows === 0) {
+        setColorAssignment({ [breaker]: 'red', [otherId]: 'yellow' })
+      }
+    }
     setBreaker(null)
     setBreakYellows(0)
     setBreakReds(0)
@@ -695,9 +714,43 @@ export default function GamePage() {
 
             /* Regular shot buttons */
             <>
-              <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3 text-center">
+              <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-2 text-center">
                 TAP TO RECORD · HOLD POT FOR MULTI-BALL
               </p>
+              {/* Color assignment bar */}
+              {colorAssignment ? (
+                <div className="flex items-center mb-3 gap-2 bg-pool-surface rounded-lg border border-pool-border px-3 py-1.5">
+                  <div className="flex items-center gap-1.5 flex-1">
+                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: colorAssignment[p1.id] === 'yellow' ? '#facc15' : '#ef4444' }} />
+                    <span className="font-body text-xs text-pool-chalk-dim">{p1.display_name}</span>
+                  </div>
+                  <button
+                    onClick={() => setColorAssignment({ [p1.id]: colorAssignment[p1.id] === 'yellow' ? 'red' : 'yellow', [p2.id]: colorAssignment[p2.id] === 'yellow' ? 'red' : 'yellow' })}
+                    className="font-body text-xs text-pool-chalk-dim/50 hover:text-pool-chalk-dim transition-colors px-1"
+                  >⇄</button>
+                  <div className="flex items-center gap-1.5 flex-1 justify-end">
+                    <span className="font-body text-xs text-pool-chalk-dim">{p2.display_name}</span>
+                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: colorAssignment[p2.id] === 'yellow' ? '#facc15' : '#ef4444' }} />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="font-body text-xs text-pool-chalk-dim shrink-0">On yellow:</span>
+                  {[p1, p2].map(player => (
+                    <button
+                      key={player.id}
+                      onClick={() => {
+                        const otherId = player.id === p1.id ? p2.id : p1.id
+                        setColorAssignment({ [player.id]: 'yellow', [otherId]: 'red' })
+                      }}
+                      className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-pool-border font-body text-xs text-pool-chalk-dim hover:border-yellow-400/50 hover:text-pool-chalk transition-all active:scale-95"
+                    >
+                      <div className="w-2.5 h-2.5 rounded-full bg-yellow-400 shrink-0" />
+                      {player.display_name}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3 flex-1">
                 {[{ player: p1, style: p1Style }, { player: p2, style: p2Style }].map(({ player, style }) => {
                   const isFlashing = flash?.playerId === player.id
