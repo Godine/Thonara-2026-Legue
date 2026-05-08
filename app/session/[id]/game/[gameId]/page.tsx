@@ -63,6 +63,7 @@ export default function GamePage() {
   const [breakYellows, setBreakYellows] = useState(0)
   const [breakReds, setBreakReds]       = useState(0)
   const [breakBlack, setBreakBlack]     = useState(false)
+  const [breakChosenColor, setBreakChosenColor] = useState<'yellow' | 'red' | null>(null)
   const [potPopup, setPotPopup]         = useState<PotPopupState | null>(null)
   const [colorAssignment, setColorAssignment] = useState<Record<string, 'yellow' | 'red'> | null>(null)
   const prevCompleteRef   = useRef<boolean | undefined>(undefined)
@@ -255,38 +256,39 @@ export default function GamePage() {
   }
 
   const recordBreak = async () => {
+    const totalColored = breakYellows + breakReds
     if (!breaker || saving) return
+    if (totalColored > 0 && !breakChosenColor) return
     setSaving(true)
-    const totalPots = breakYellows + breakReds + (breakBlack ? 1 : 0)
     const rows: Parameters<typeof insertShots>[1] = []
     let shotNum = 1
-    if (totalPots === 0) {
+    if (totalColored === 0 && !breakBlack) {
+      // Miss
       rows.push({ game_id: gameId, player_id: breaker, potted: false, balls_potted: 0, opponent_balls_potted: 0, ball_color: null, is_lucky: false, is_error: false, shot_number: shotNum++ })
     } else {
-      for (let i = 0; i < breakYellows; i++)
-        rows.push({ game_id: gameId, player_id: breaker, potted: true, balls_potted: 1, opponent_balls_potted: 0, ball_color: 'yellow', is_lucky: false, is_error: false, shot_number: shotNum++ })
-      for (let i = 0; i < breakReds; i++)
-        rows.push({ game_id: gameId, player_id: breaker, potted: true, balls_potted: 1, opponent_balls_potted: 0, ball_color: 'red', is_lucky: false, is_error: false, shot_number: shotNum++ })
-      if (breakBlack)
+      if (totalColored > 0 && breakChosenColor) {
+        const chosenBalls = breakChosenColor === 'yellow' ? breakYellows : breakReds
+        const otherBalls  = breakChosenColor === 'yellow' ? breakReds    : breakYellows
+        rows.push({ game_id: gameId, player_id: breaker, potted: chosenBalls > 0, balls_potted: chosenBalls, opponent_balls_potted: otherBalls, ball_color: breakChosenColor, is_lucky: false, is_error: false, shot_number: shotNum++ })
+      }
+      if (breakBlack) {
         rows.push({ game_id: gameId, player_id: breaker, potted: true, balls_potted: 1, opponent_balls_potted: 0, ball_color: 'black', is_lucky: false, is_error: false, shot_number: shotNum++ })
+      }
     }
     const now = Date.now()
     setShots(rows.map((r, i) => ({ id: `temp-${now}-${i}`, created_at: new Date().toISOString(), ...r })))
     await insertShots(db, rows)
-    haptic(totalPots > 0 ? [30, 15, 30] : 20)
+    haptic((totalColored + (breakBlack ? 1 : 0)) > 0 ? [30, 15, 30] : 20)
     setSaving(false)
-    if (game) {
+    if (breakChosenColor && game) {
       const otherId = game.player1_id === breaker ? game.player2_id : game.player1_id
-      if (breakYellows > 0 && breakReds === 0) {
-        setColorAssignment({ [breaker]: 'yellow', [otherId]: 'red' })
-      } else if (breakReds > 0 && breakYellows === 0) {
-        setColorAssignment({ [breaker]: 'red', [otherId]: 'yellow' })
-      }
+      setColorAssignment({ [breaker]: breakChosenColor, [otherId]: breakChosenColor === 'yellow' ? 'red' : 'yellow' })
     }
     setBreaker(null)
     setBreakYellows(0)
     setBreakReds(0)
     setBreakBlack(false)
+    setBreakChosenColor(null)
   }
 
   const undoLastShot = async () => {
@@ -388,12 +390,13 @@ export default function GamePage() {
     let pots = 0, yellows = 0, reds = 0, black = false
     for (const s of sorted) {
       if (s.player_id !== breakerId) break
-      const sp = s.balls_potted ?? (s.potted ? 1 : 0)
-      if (sp === 0) break
-      pots += sp
-      if (s.ball_color === 'yellow') yellows += sp
-      else if (s.ball_color === 'red') reds += sp
-      else if (s.ball_color === 'black') black = true
+      const sp  = s.balls_potted ?? (s.potted ? 1 : 0)
+      const opp = s.opponent_balls_potted ?? 0
+      if (sp === 0 && opp === 0) break
+      pots += sp + opp
+      if (s.ball_color === 'yellow')      { yellows += sp; reds    += opp }
+      else if (s.ball_color === 'red')    { reds    += sp; yellows += opp }
+      else if (s.ball_color === 'black')  { black = true }
     }
     return { pots, yellows, reds, black, breakPlayer: breakerId === p1.id ? p1 : p2 }
   })()
@@ -698,12 +701,37 @@ export default function GamePage() {
                     <div className={`w-4 h-4 rounded-full border-2 shrink-0 transition-all ${breakBlack ? 'bg-pool-chalk border-pool-chalk' : 'border-pool-chalk-dim'}`} />
                     <span className="font-body text-sm">Black ball potted</span>
                   </button>
+
+                  {/* Breaker's chosen color — only when colored balls were potted */}
+                  {(breakYellows + breakReds) > 0 && (
+                    <div className="pt-1">
+                      <p className="font-body text-xs text-pool-chalk-dim text-center mb-2">Breaker's colour</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(['yellow', 'red'] as const).map(color => (
+                          <button
+                            key={color}
+                            onClick={() => setBreakChosenColor(color)}
+                            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 font-body text-sm transition-all active:scale-95 ${
+                              breakChosenColor === color
+                                ? color === 'yellow'
+                                  ? 'border-yellow-400 bg-yellow-400/20 text-yellow-300'
+                                  : 'border-red-500 bg-red-500/20 text-red-400'
+                                : 'border-pool-border text-pool-chalk-dim hover:border-pool-chalk/30'
+                            }`}
+                          >
+                            <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: color === 'yellow' ? '#facc15' : '#ef4444' }} />
+                            {color === 'yellow' ? 'Yellow' : 'Red'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
               <button
                 onClick={recordBreak}
-                disabled={!breaker || saving}
+                disabled={!breaker || saving || ((breakYellows + breakReds) > 0 && !breakChosenColor)}
                 className="w-full py-4 rounded-2xl bg-pool-gold text-pool-bg font-heading text-xl tracking-widest hover:bg-pool-gold-light disabled:opacity-40 transition-all active:scale-[0.98] glow-gold"
               >
                 {saving ? 'SAVING…' : 'RECORD BREAK'}
