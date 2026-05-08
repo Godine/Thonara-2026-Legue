@@ -849,13 +849,20 @@ export default function GamePage() {
       ) : (
 
         /* ── WATCHING ── */
-        <div className="px-4 flex-1">
-          {!currentUsername && (
-            <div className="text-center py-8">
-              <div className="text-3xl mb-3">📱</div>
-              <p className="font-body text-pool-chalk-dim text-sm">Watching live — updates appear automatically</p>
+        <div className="px-4 flex-1 flex flex-col gap-4 pb-6">
+          <div className="rounded-2xl border border-pool-green-bright/20 px-4 py-5 text-center"
+            style={{ background: 'linear-gradient(135deg, #22c55e0a 0%, transparent 100%)' }}>
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <span className="w-2 h-2 rounded-full bg-pool-green-bright animate-pulse" />
+              <span className="font-heading text-xs tracking-widest text-pool-green-bright">LIVE</span>
             </div>
-          )}
+            <p className="font-body text-sm text-pool-chalk-dim">
+              Updates stream automatically — no refresh needed.
+            </p>
+            <p className="font-body text-xs text-pool-chalk-dim/60 mt-2">
+              Tap your name in the menu above to start scoring.
+            </p>
+          </div>
         </div>
       )}
 

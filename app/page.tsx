@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { createClient } from '@/lib/supabase/server'
-import { fetchStandings, fetchRecentSession } from '@/lib/queries'
+import { fetchStandings, fetchRecentSession, fetchLiveGame } from '@/lib/queries'
 import { generateNarrative } from '@/lib/narrative'
 import Link from 'next/link'
 import { format, isToday, isYesterday, parseISO } from 'date-fns'
@@ -20,9 +20,10 @@ function sessionDateLabel(dateStr: string) {
 
 export default async function Dashboard() {
   const db = createClient()
-  const [standings, recent] = await Promise.all([
+  const [standings, recent, liveGame] = await Promise.all([
     fetchStandings(db),
     fetchRecentSession(db),
+    fetchLiveGame(db),
   ])
 
   const sorted = [...standings].sort((a, b) => b.wins - a.wins)
@@ -68,6 +69,51 @@ export default async function Dashboard() {
           &ldquo;{narrative}&rdquo;
         </p>
       </div>
+
+      {/* ── LIVE GAME BANNER ─────────────────────────────────────────── */}
+      {liveGame && (
+        <section className="px-4 -mt-1 mb-1">
+          <Link
+            href={`/session/${liveGame.sessionId}/game/${liveGame.gameId}`}
+            className="flex items-center gap-3 rounded-2xl border px-4 py-3 transition-all active:scale-[0.98]"
+            style={{
+              borderColor: '#22c55e40',
+              background: 'linear-gradient(135deg, #22c55e12 0%, #22c55e06 100%)',
+            }}
+          >
+            {/* Pulse + game label */}
+            <div className="shrink-0 flex flex-col items-center gap-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-pool-green-bright animate-pulse" />
+                <span className="font-heading text-[10px] tracking-widest text-pool-green-bright">LIVE</span>
+              </div>
+              <span className="font-heading text-xs text-pool-chalk-dim">G{liveGame.gameNumber}</span>
+            </div>
+
+            <div className="w-px h-8 bg-pool-border shrink-0" />
+
+            {/* Players */}
+            <div className="flex-1 min-w-0">
+              <p className="font-heading text-sm tracking-wide text-pool-chalk leading-snug">
+                <span style={{ color: PLAYER_STYLES[liveGame.player1.username as PlayerUsername]?.color }}>
+                  {liveGame.player1.display_name}
+                </span>
+                <span className="text-pool-chalk-dim"> vs </span>
+                <span style={{ color: PLAYER_STYLES[liveGame.player2.username as PlayerUsername]?.color }}>
+                  {liveGame.player2.display_name}
+                </span>
+              </p>
+              <p className="font-body text-xs text-pool-chalk-dim mt-0.5">
+                {liveGame.shotCount > 0
+                  ? `${liveGame.shotCount} shots in · tap to watch or score`
+                  : 'Up next — tap to join'}
+              </p>
+            </div>
+
+            <span className="font-heading text-pool-green-bright shrink-0">→</span>
+          </Link>
+        </section>
+      )}
 
       {/* ── THE TABLE ────────────────────────────────────────────────── */}
       <section className="px-4 pb-5">

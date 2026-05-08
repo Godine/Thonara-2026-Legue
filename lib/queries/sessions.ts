@@ -35,6 +35,52 @@ export async function fetchSession(db: SupabaseClient, id: string): Promise<Sess
   return data as SessionFull
 }
 
+export interface LiveGame {
+  sessionId: string
+  sessionDate: string
+  gameId: string
+  gameNumber: number
+  player1: { id: string; username: string; display_name: string }
+  player2: { id: string; username: string; display_name: string }
+  shotCount: number
+}
+
+export async function fetchLiveGame(db: SupabaseClient): Promise<LiveGame | null> {
+  const { data } = await db
+    .from('sessions')
+    .select(`
+      id, date,
+      games (
+        id, game_number, is_complete,
+        player1:players!games_player1_id_fkey ( id, username, display_name ),
+        player2:players!games_player2_id_fkey ( id, username, display_name ),
+        shots ( id )
+      )
+    `)
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!data) return null
+
+  const games = ((data.games as any[]) ?? []).sort((a: any, b: any) => a.game_number - b.game_number)
+  const incomplete = games.filter((g: any) => !g.is_complete)
+  if (incomplete.length === 0) return null
+
+  // Prefer a game that has already started; fall back to the next pending game
+  const active = incomplete.find((g: any) => (g.shots?.length ?? 0) > 0) ?? incomplete[0]
+
+  return {
+    sessionId: data.id,
+    sessionDate: data.date,
+    gameId: active.id,
+    gameNumber: active.game_number,
+    player1: active.player1,
+    player2: active.player2,
+    shotCount: active.shots?.length ?? 0,
+  }
+}
+
 export async function fetchRecentSession(db: SupabaseClient) {
   const { data } = await db
     .from('sessions')
