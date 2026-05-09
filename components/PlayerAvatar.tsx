@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useState } from 'react'
 import { PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import PlayerBall from './PlayerBall'
@@ -10,8 +11,6 @@ interface Props {
   className?: string
 }
 
-// Shows the player's photo in a rounded frame if available,
-// falls back silently to the PlayerBall SVG if the image 404s.
 export default function PlayerAvatar({ username, size = 48, className = '' }: Props) {
   const [error, setError] = useState(false)
   const style = PLAYER_STYLES[username]
@@ -30,10 +29,11 @@ export default function PlayerAvatar({ username, size = 48, className = '' }: Pr
           boxShadow: `0 0 10px ${style.color}40`,
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <Image
           src={style.photo}
           alt={style.label}
+          width={size}
+          height={size}
           onError={() => setError(true)}
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
         />
