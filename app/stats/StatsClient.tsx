@@ -332,7 +332,7 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
 
       {/* ── PAGE HEADER ─────────────────────────────────────────────── */}
       <div className="px-4 pt-6 pb-4">
-        <p className="font-body text-xs tracking-[0.25em] uppercase text-pool-chalk-dim">2026 Season</p>
+        <p className="font-body text-xs tracking-[0.25em] uppercase text-pool-chalk-dim">Thonara League</p>
         <div className="flex items-baseline justify-between mt-0.5">
           <h1 className="font-heading text-5xl tracking-wider text-pool-chalk">STATS</h1>
           <p className="font-body text-sm text-pool-chalk-dim">{games.length} games · {sessionOrder.length} sessions</p>

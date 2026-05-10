@@ -1189,7 +1189,7 @@ export default function GamePage() {
             }}
             onClick={e => e.stopPropagation()}
           >
-            <p className="font-body text-xs tracking-[0.25em] uppercase text-pool-chalk-dim">Thonara 2026 · Game Recap</p>
+            <p className="font-body text-xs tracking-[0.25em] uppercase text-pool-chalk-dim">Thonara League · Game Recap</p>
             <div className="text-5xl">📢</div>
             <p className="font-heading text-xl tracking-wide text-pool-chalk leading-snug">{trashTalkLine}</p>
             <div className="w-full grid grid-cols-2 gap-3 pt-2 border-t border-pool-border">

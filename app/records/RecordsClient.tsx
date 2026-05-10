@@ -30,7 +30,7 @@ export default function RecordsClient({ games, shots }: Props) {
           ← Badges
         </Link>
 
-        <p className="font-body text-xs tracking-[0.35em] uppercase text-pool-chalk-dim relative">Thonara 2026</p>
+        <p className="font-body text-xs tracking-[0.35em] uppercase text-pool-chalk-dim relative">Thonara League</p>
         <h1 className="font-heading text-[3.5rem] leading-none tracking-widest text-pool-chalk relative mt-1">RECORDS</h1>
         <p className="font-body text-sm text-pool-chalk-dim mt-2 relative">All-time hall of fame</p>
 

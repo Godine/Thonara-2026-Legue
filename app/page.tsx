@@ -299,7 +299,7 @@ export default function Dashboard() {
           style={{ backgroundImage: 'radial-gradient(circle, #c9a227 1.5px, transparent 1.5px)', backgroundSize: '36px 36px' }} />
 
         <p className="font-body text-xs tracking-[0.35em] uppercase text-pool-chalk-dim relative">
-          Season 2026
+          Season {new Date().getFullYear()}
         </p>
         <h1 className="font-heading text-[4.5rem] leading-none tracking-widest text-pool-chalk relative mt-1">
           THONARA

@@ -70,7 +70,7 @@ export default function Navbar() {
             <span className="font-heading text-lg tracking-widest text-pool-chalk group-hover:text-pool-gold transition-colors">
               THONARA
             </span>
-            <span className="font-heading text-lg tracking-widest text-pool-gold">2026</span>
+            <span className="font-heading text-lg tracking-widest text-pool-gold">LEAGUE</span>
           </Link>
 
           <div className="flex items-center gap-2 ml-auto">

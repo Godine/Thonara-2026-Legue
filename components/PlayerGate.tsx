@@ -70,7 +70,7 @@ export default function PlayerGate() {
             THONARA
           </h1>
           <p className="font-heading text-2xl tracking-[0.5em] gold-shimmer mb-6">
-            LEAGUE 2026
+            LEAGUE
           </p>
           <div className="h-px bg-gradient-to-r from-transparent via-pool-gold/30 to-transparent" />
         </div>
