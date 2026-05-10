@@ -3,6 +3,8 @@ import { Bebas_Neue, DM_Sans } from 'next/font/google'
 import './globals.css'
 import Navbar from '@/components/Navbar'
 import PlayerGate from '@/components/PlayerGate'
+import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration'
+import OfflineBanner from '@/components/OfflineBanner'
 
 const bebasNeue = Bebas_Neue({
   weight: '400',
@@ -40,8 +42,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${bebasNeue.variable} ${dmSans.variable}`}>
       <body>
+        <ServiceWorkerRegistration />
         <PlayerGate />
         <Navbar />
+        <OfflineBanner />
         <main className="min-h-dvh pt-14">
           {children}
         </main>
