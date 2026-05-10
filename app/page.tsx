@@ -1,5 +1,6 @@
 export const revalidate = 30
 
+import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { fetchStandings, fetchRecentSession, fetchLiveGame } from '@/lib/queries'
 import { generateNarrative } from '@/lib/narrative'
@@ -18,104 +19,68 @@ function sessionDateLabel(dateStr: string) {
   return format(d, 'EEE, MMM d')
 }
 
-export default async function Dashboard() {
-  const db = createClient()
-  const [standings, recent, liveGame] = await Promise.all([
-    fetchStandings(db),
-    fetchRecentSession(db),
-    fetchLiveGame(db),
-  ])
+// ── Streaming data components ─────────────────────────────────────────
 
+async function LiveBannerStream() {
+  const db = createClient()
+  const liveGame = await fetchLiveGame(db)
+  if (!liveGame) return null
+  return (
+    <section className="px-4 -mt-1 mb-1">
+      <Link
+        href={`/session/${liveGame.sessionId}/game/${liveGame.gameId}`}
+        className="flex items-center gap-3 rounded-2xl border px-4 py-3 transition-all active:scale-[0.98]"
+        style={{
+          borderColor: '#22c55e40',
+          background: 'linear-gradient(135deg, #22c55e12 0%, #22c55e06 100%)',
+        }}
+      >
+        <div className="shrink-0 flex flex-col items-center gap-0.5">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-pool-green-bright animate-pulse" />
+            <span className="font-heading text-[10px] tracking-widest text-pool-green-bright">LIVE</span>
+          </div>
+          <span className="font-heading text-xs text-pool-chalk-dim">G{liveGame.gameNumber}</span>
+        </div>
+
+        <div className="w-px h-8 bg-pool-border shrink-0" />
+
+        <div className="flex-1 min-w-0">
+          <p className="font-heading text-sm tracking-wide text-pool-chalk leading-snug">
+            <span style={{ color: PLAYER_STYLES[liveGame.player1.username as PlayerUsername]?.color }}>
+              {liveGame.player1.display_name}
+            </span>
+            <span className="text-pool-chalk-dim"> vs </span>
+            <span style={{ color: PLAYER_STYLES[liveGame.player2.username as PlayerUsername]?.color }}>
+              {liveGame.player2.display_name}
+            </span>
+          </p>
+          <p className="font-body text-xs text-pool-chalk-dim mt-0.5">
+            {liveGame.shotCount > 0
+              ? `${liveGame.shotCount} shots in · tap to watch or score`
+              : 'Up next — tap to join'}
+          </p>
+        </div>
+
+        <span className="font-heading text-pool-green-bright shrink-0">→</span>
+      </Link>
+    </section>
+  )
+}
+
+async function StandingsStream() {
+  const db = createClient()
+  const standings = await fetchStandings(db)
   const sorted = [...standings].sort((a, b) => b.wins - a.wins)
   const narrative = generateNarrative(sorted as any)
   const leaderWins = sorted[0]?.wins ?? 0
 
   return (
-    <div className="max-w-lg mx-auto animate-fade-in">
-      <PullToRefresh />
+    <>
+      <p className="font-body text-sm text-pool-chalk-dim italic relative leading-relaxed px-4 pb-6 text-center">
+        &ldquo;{narrative}&rdquo;
+      </p>
 
-      {/* ── HERO ─────────────────────────────────────────────────────── */}
-      <div className="relative px-4 pt-10 pb-8 text-center overflow-hidden">
-        {/* Felt glow */}
-        <div className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse 80% 60% at 50% 0%, #1a4731 0%, transparent 70%)' }} />
-        {/* Rail diamond spots */}
-        <div className="absolute inset-0 pointer-events-none opacity-[0.07]"
-          style={{ backgroundImage: 'radial-gradient(circle, #c9a227 1.5px, transparent 1.5px)', backgroundSize: '36px 36px' }} />
-
-        <p className="font-body text-xs tracking-[0.35em] uppercase text-pool-chalk-dim relative">
-          Season 2026
-        </p>
-        <h1 className="font-heading text-[4.5rem] leading-none tracking-widest text-pool-chalk relative mt-1">
-          THONARA
-        </h1>
-        <h2 className="font-heading text-3xl tracking-[0.5em] gold-shimmer relative">
-          LEAGUE
-        </h2>
-
-        {/* 8-ball divider */}
-        <div className="relative my-5 flex items-center gap-3">
-          <div className="flex-1 h-px bg-gradient-to-r from-transparent to-pool-gold/30" />
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <circle cx="9" cy="9" r="9" fill="#111" />
-            <circle cx="9" cy="9" r="4.5" fill="white" />
-            <text x="9" y="12.5" textAnchor="middle" fontSize="6" fontWeight="bold" fill="#111">8</text>
-          </svg>
-          <div className="flex-1 h-px bg-gradient-to-l from-transparent to-pool-gold/30" />
-        </div>
-
-        {/* Narrative */}
-        <p className="font-body text-sm text-pool-chalk-dim italic relative leading-relaxed">
-          &ldquo;{narrative}&rdquo;
-        </p>
-      </div>
-
-      {/* ── LIVE GAME BANNER ─────────────────────────────────────────── */}
-      {liveGame && (
-        <section className="px-4 -mt-1 mb-1">
-          <Link
-            href={`/session/${liveGame.sessionId}/game/${liveGame.gameId}`}
-            className="flex items-center gap-3 rounded-2xl border px-4 py-3 transition-all active:scale-[0.98]"
-            style={{
-              borderColor: '#22c55e40',
-              background: 'linear-gradient(135deg, #22c55e12 0%, #22c55e06 100%)',
-            }}
-          >
-            {/* Pulse + game label */}
-            <div className="shrink-0 flex flex-col items-center gap-0.5">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-pool-green-bright animate-pulse" />
-                <span className="font-heading text-[10px] tracking-widest text-pool-green-bright">LIVE</span>
-              </div>
-              <span className="font-heading text-xs text-pool-chalk-dim">G{liveGame.gameNumber}</span>
-            </div>
-
-            <div className="w-px h-8 bg-pool-border shrink-0" />
-
-            {/* Players */}
-            <div className="flex-1 min-w-0">
-              <p className="font-heading text-sm tracking-wide text-pool-chalk leading-snug">
-                <span style={{ color: PLAYER_STYLES[liveGame.player1.username as PlayerUsername]?.color }}>
-                  {liveGame.player1.display_name}
-                </span>
-                <span className="text-pool-chalk-dim"> vs </span>
-                <span style={{ color: PLAYER_STYLES[liveGame.player2.username as PlayerUsername]?.color }}>
-                  {liveGame.player2.display_name}
-                </span>
-              </p>
-              <p className="font-body text-xs text-pool-chalk-dim mt-0.5">
-                {liveGame.shotCount > 0
-                  ? `${liveGame.shotCount} shots in · tap to watch or score`
-                  : 'Up next — tap to join'}
-              </p>
-            </div>
-
-            <span className="font-heading text-pool-green-bright shrink-0">→</span>
-          </Link>
-        </section>
-      )}
-
-      {/* ── THE TABLE ────────────────────────────────────────────────── */}
       <section className="px-4 pb-5">
         <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim mb-3">THE TABLE</p>
         {sorted.length === 0 ? (
@@ -189,6 +154,181 @@ export default async function Dashboard() {
           </div>
         )}
       </section>
+    </>
+  )
+}
+
+async function RecentSessionStream() {
+  const db = createClient()
+  const recent = await fetchRecentSession(db)
+  if (!recent) return null
+
+  return (
+    <section className="px-4 pb-10">
+      <div className="flex items-center justify-between mb-3">
+        <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim">LAST SESSION</p>
+        <span className="font-body text-xs text-pool-chalk-dim">{sessionDateLabel(recent.date)}</span>
+      </div>
+
+      <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
+        <div className="divide-y divide-pool-border">
+          {(recent.games as any[])
+            ?.sort((a: any, b: any) => a.game_number - b.game_number)
+            .map((game: any) => {
+              const p1Style = PLAYER_STYLES[game.player1?.username as PlayerUsername]
+              const p2Style = PLAYER_STYLES[game.player2?.username as PlayerUsername]
+              const p1Won   = game.winner_id === game.player1?.id
+              const p2Won   = game.winner_id === game.player2?.id
+
+              return (
+                <div key={game.id} className="flex items-center gap-3 px-3 py-2.5">
+                  <span className="font-heading text-xs text-pool-chalk-dim w-6 shrink-0">G{game.game_number}</span>
+
+                  <div className={`flex items-center gap-1.5 flex-1 justify-end transition-opacity ${!game.is_complete ? '' : p1Won ? 'opacity-100' : 'opacity-35'}`}>
+                    <span className="font-heading text-sm" style={{ color: p1Won ? p1Style?.color : undefined }}>
+                      {game.player1?.display_name}
+                    </span>
+                    {game.player1?.username && (
+                      <PlayerAvatar username={game.player1.username as PlayerUsername} size={26} />
+                    )}
+                  </div>
+
+                  <div className="shrink-0 text-center w-10">
+                    {game.is_complete ? (
+                      <span className="font-heading text-xs text-pool-gold">✓</span>
+                    ) : (
+                      <span className="font-body text-xs text-pool-chalk-dim">vs</span>
+                    )}
+                  </div>
+
+                  <div className={`flex items-center gap-1.5 flex-1 transition-opacity ${!game.is_complete ? '' : p2Won ? 'opacity-100' : 'opacity-35'}`}>
+                    {game.player2?.username && (
+                      <PlayerAvatar username={game.player2.username as PlayerUsername} size={26} />
+                    )}
+                    <span className="font-heading text-sm" style={{ color: p2Won ? p2Style?.color : undefined }}>
+                      {game.player2?.display_name}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+        </div>
+
+        <Link
+          href={`/session/${recent.id}`}
+          className="flex items-center justify-center gap-1 py-3 text-sm font-body text-pool-chalk-dim hover:text-pool-gold transition-colors border-t border-pool-border"
+        >
+          View full session →
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+// ── Skeleton fallbacks ────────────────────────────────────────────────
+
+function StandingsSkeleton() {
+  return (
+    <>
+      <p className="font-body text-sm text-pool-chalk-dim/20 italic px-4 pb-6 text-center">
+        &ldquo;&hellip;&rdquo;
+      </p>
+      <section className="px-4 pb-5">
+        <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim mb-3">THE TABLE</p>
+        <div className="space-y-2">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="bg-pool-surface rounded-2xl border border-pool-border p-4 animate-pulse">
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 rounded-full bg-pool-border" />
+                <div className="w-12 h-12 rounded-full bg-pool-border" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-pool-border rounded w-24" />
+                  <div className="h-1.5 bg-pool-border rounded w-full" />
+                  <div className="h-3 bg-pool-border rounded w-32" />
+                </div>
+                <div className="w-10 h-12 bg-pool-border rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
+  )
+}
+
+function RecentSessionSkeleton() {
+  return (
+    <section className="px-4 pb-10">
+      <div className="flex items-center justify-between mb-3">
+        <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim">LAST SESSION</p>
+      </div>
+      <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden animate-pulse">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="flex items-center gap-3 px-3 py-2.5 border-b border-pool-border">
+            <div className="w-6 h-3 bg-pool-border rounded" />
+            <div className="flex-1 flex justify-end gap-2">
+              <div className="h-3 bg-pool-border rounded w-14" />
+              <div className="w-6 h-6 rounded-full bg-pool-border" />
+            </div>
+            <div className="w-10 h-3 bg-pool-border rounded mx-auto" />
+            <div className="flex-1 flex gap-2">
+              <div className="w-6 h-6 rounded-full bg-pool-border" />
+              <div className="h-3 bg-pool-border rounded w-14" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+// ── Main page shell (renders immediately — no data needed) ────────────
+
+export default function Dashboard() {
+  return (
+    <div className="max-w-lg mx-auto animate-fade-in">
+      <PullToRefresh />
+
+      {/* ── HERO ─────────────────────────────────────────────────────── */}
+      <div className="relative px-4 pt-10 pb-2 text-center overflow-hidden">
+        {/* Felt glow */}
+        <div className="absolute inset-0 pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse 80% 60% at 50% 0%, #1a4731 0%, transparent 70%)' }} />
+        {/* Rail diamond spots */}
+        <div className="absolute inset-0 pointer-events-none opacity-[0.07]"
+          style={{ backgroundImage: 'radial-gradient(circle, #c9a227 1.5px, transparent 1.5px)', backgroundSize: '36px 36px' }} />
+
+        <p className="font-body text-xs tracking-[0.35em] uppercase text-pool-chalk-dim relative">
+          Season 2026
+        </p>
+        <h1 className="font-heading text-[4.5rem] leading-none tracking-widest text-pool-chalk relative mt-1">
+          THONARA
+        </h1>
+        <h2 className="font-heading text-3xl tracking-[0.5em] gold-shimmer relative">
+          LEAGUE
+        </h2>
+
+        {/* 8-ball divider */}
+        <div className="relative my-5 flex items-center gap-3">
+          <div className="flex-1 h-px bg-gradient-to-r from-transparent to-pool-gold/30" />
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <circle cx="9" cy="9" r="9" fill="#111" />
+            <circle cx="9" cy="9" r="4.5" fill="white" />
+            <text x="9" y="12.5" textAnchor="middle" fontSize="6" fontWeight="bold" fill="#111">8</text>
+          </svg>
+          <div className="flex-1 h-px bg-gradient-to-l from-transparent to-pool-gold/30" />
+        </div>
+      </div>
+
+      {/* ── LIVE GAME BANNER (streams in) ────────────────────────────── */}
+      <Suspense fallback={null}>
+        <LiveBannerStream />
+      </Suspense>
+
+      {/* ── NARRATIVE + STANDINGS (streams in) ───────────────────────── */}
+      <Suspense fallback={<StandingsSkeleton />}>
+        <StandingsStream />
+      </Suspense>
 
       {/* ── CTA ──────────────────────────────────────────────────────── */}
       <section className="px-4 pb-5 space-y-2.5">
@@ -218,70 +358,10 @@ export default async function Dashboard() {
         </div>
       </section>
 
-      {/* ── LAST SESSION ─────────────────────────────────────────────── */}
-      {recent && (
-        <section className="px-4 pb-10">
-          <div className="flex items-center justify-between mb-3">
-            <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim">LAST SESSION</p>
-            <span className="font-body text-xs text-pool-chalk-dim">{sessionDateLabel(recent.date)}</span>
-          </div>
-
-          <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
-            <div className="divide-y divide-pool-border">
-              {(recent.games as any[])
-                ?.sort((a: any, b: any) => a.game_number - b.game_number)
-                .map((game: any) => {
-                  const p1Style = PLAYER_STYLES[game.player1?.username as PlayerUsername]
-                  const p2Style = PLAYER_STYLES[game.player2?.username as PlayerUsername]
-                  const p1Won   = game.winner_id === game.player1?.id
-                  const p2Won   = game.winner_id === game.player2?.id
-
-                  return (
-                    <div key={game.id} className="flex items-center gap-3 px-3 py-2.5">
-                      <span className="font-heading text-xs text-pool-chalk-dim w-6 shrink-0">G{game.game_number}</span>
-
-                      {/* Player 1 */}
-                      <div className={`flex items-center gap-1.5 flex-1 justify-end transition-opacity ${!game.is_complete ? '' : p1Won ? 'opacity-100' : 'opacity-35'}`}>
-                        <span className="font-heading text-sm" style={{ color: p1Won ? p1Style?.color : undefined }}>
-                          {game.player1?.display_name}
-                        </span>
-                        {game.player1?.username && (
-                          <PlayerAvatar username={game.player1.username as PlayerUsername} size={26} />
-                        )}
-                      </div>
-
-                      {/* Score / status */}
-                      <div className="shrink-0 text-center w-10">
-                        {game.is_complete ? (
-                          <span className="font-heading text-xs text-pool-gold">✓</span>
-                        ) : (
-                          <span className="font-body text-xs text-pool-chalk-dim">vs</span>
-                        )}
-                      </div>
-
-                      {/* Player 2 */}
-                      <div className={`flex items-center gap-1.5 flex-1 transition-opacity ${!game.is_complete ? '' : p2Won ? 'opacity-100' : 'opacity-35'}`}>
-                        {game.player2?.username && (
-                          <PlayerAvatar username={game.player2.username as PlayerUsername} size={26} />
-                        )}
-                        <span className="font-heading text-sm" style={{ color: p2Won ? p2Style?.color : undefined }}>
-                          {game.player2?.display_name}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                })}
-            </div>
-
-            <Link
-              href={`/session/${recent.id}`}
-              className="flex items-center justify-center gap-1 py-3 text-sm font-body text-pool-chalk-dim hover:text-pool-gold transition-colors border-t border-pool-border"
-            >
-              View full session →
-            </Link>
-          </div>
-        </section>
-      )}
+      {/* ── LAST SESSION (streams in) ─────────────────────────────────── */}
+      <Suspense fallback={<RecentSessionSkeleton />}>
+        <RecentSessionStream />
+      </Suspense>
     </div>
   )
 }
