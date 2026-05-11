@@ -3,7 +3,7 @@ import { ImageResponse } from 'next/og'
 export const size = { width: 180, height: 180 }
 export const contentType = 'image/png'
 
-// Apple touch icon — same design, optimised for 180×180
+// Proportionally scaled from the 512px icon (scale ≈ 0.352)
 export default function AppleIcon() {
   return new ImageResponse(
     (
@@ -14,64 +14,117 @@ export default function AppleIcon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'radial-gradient(circle at 40% 35%, #0e1e12 0%, #060d08 100%)',
+          background: 'transparent',
           position: 'relative',
         }}
       >
+
+        {/* Outer aura */}
+        <div style={{
+          position: 'absolute',
+          width: 180, height: 180,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle at 50% 50%, transparent 42%, rgba(201,162,39,0.22) 50%, rgba(201,162,39,0.10) 60%, rgba(201,162,39,0.03) 70%, transparent 78%)',
+          display: 'flex',
+        }} />
+
         {/* Gold ring */}
-        <div
-          style={{
-            width: 160,
-            height: 160,
-            borderRadius: 9999,
-            background: 'linear-gradient(145deg, #e8c547 0%, #c9a227 48%, #a07820 100%)',
+        <div style={{
+          position: 'absolute',
+          width: 172, height: 172,
+          borderRadius: '50%',
+          background: 'conic-gradient(from 130deg, #f0d060, #e8c547 12%, #c9a227 30%, #a07820 52%, #c9a227 68%, #e8c547 82%, #f0d060 92%, #e8c547)',
+          display: 'flex',
+        }} />
+
+        {/* Dark gap */}
+        <div style={{
+          position: 'absolute',
+          width: 167, height: 167,
+          borderRadius: '50%',
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+        }} />
+
+        {/* Ball */}
+        <div style={{
+          position: 'absolute',
+          width: 163, height: 163,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle at 33% 28%, #2a2a2a 0%, #161616 22%, #080808 56%, #000000 100%)',
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+
+          {/* Auroras */}
+          <div style={{ position: 'absolute', top: 0, left: 0, width: '46%', height: '52%', background: 'radial-gradient(ellipse at 20% 16%, rgba(245,197,24,0.24) 0%, transparent 65%)', display: 'flex' }} />
+          <div style={{ position: 'absolute', top: 0, left: '27%', width: '46%', height: '44%', background: 'radial-gradient(ellipse at 50% 6%, rgba(96,165,250,0.18) 0%, transparent 62%)', display: 'flex' }} />
+          <div style={{ position: 'absolute', top: 0, right: 0, width: '46%', height: '52%', background: 'radial-gradient(ellipse at 80% 16%, rgba(248,113,113,0.24) 0%, transparent 65%)', display: 'flex' }} />
+
+          {/* Ambient occlusion */}
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '42%', background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.20) 60%, transparent 100%)', display: 'flex' }} />
+
+          {/* Primary specular */}
+          <div style={{
+            position: 'absolute', top: '6%', left: '13%',
+            width: '40%', height: '28%',
+            borderRadius: '50%',
+            background: 'radial-gradient(ellipse at 38% 32%, rgba(255,255,255,0.62) 0%, rgba(255,255,255,0.30) 35%, rgba(255,255,255,0) 70%)',
+            display: 'flex',
+          }} />
+
+          {/* Secondary specular */}
+          <div style={{
+            position: 'absolute', top: '10%', left: '19%',
+            width: '13%', height: '9%',
+            borderRadius: '50%',
+            background: 'radial-gradient(ellipse at 42% 36%, rgba(255,255,255,0.94) 0%, rgba(255,255,255,0.50) 42%, transparent 74%)',
+            display: 'flex',
+          }} />
+
+          {/* Rim light */}
+          <div style={{
+            position: 'absolute', top: '1.5%', left: '1.5%',
+            width: '97%', height: '97%',
+            borderRadius: '50%',
+            border: '1.5px solid rgba(255,255,255,0.07)',
+            display: 'flex',
+          }} />
+
+          {/* White circle */}
+          <div style={{
+            width: 68, height: 68,
+            borderRadius: '50%',
+            background: 'radial-gradient(circle at 38% 34%, #ffffff 0%, #f5f5f5 50%, #ececec 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-          }}
-        >
-          <div
-            style={{
-              width: 154,
-              height: 154,
-              borderRadius: 9999,
-              background: '#060d08',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {/* Ball */}
-            <div
-              style={{
-                width: 148,
-                height: 148,
-                borderRadius: 9999,
-                background: 'radial-gradient(circle at 34% 28%, #2d2d2d 0%, #0f0f0f 50%, #000 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-            >
-              <div style={{ position: 'absolute', top: 0, left: 0,     width: '34%', height: '54%', background: 'linear-gradient(to bottom right, rgba(245,197,24,0.40), rgba(245,197,24,0))',   display: 'flex' }} />
-              <div style={{ position: 'absolute', top: 0, left: '33%', width: '34%', height: '54%', background: 'linear-gradient(to bottom,       rgba(96,165,250,0.30),  rgba(96,165,250,0))',   display: 'flex' }} />
-              <div style={{ position: 'absolute', top: 0, right: 0,    width: '34%', height: '54%', background: 'linear-gradient(to bottom left,  rgba(248,113,113,0.40), rgba(248,113,113,0))', display: 'flex' }} />
-              <div style={{ position: 'absolute', top: '9%', left: '18%', width: '30%', height: '22%', borderRadius: 9999, background: 'rgba(255,255,255,0.20)', display: 'flex' }} />
-              <div style={{ width: 68, height: 58, borderRadius: 9999, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 2 }}>
-                <div style={{ fontSize: 38, fontWeight: 900, color: '#000000', fontFamily: 'sans-serif', lineHeight: 1 }}>T</div>
-              </div>
+          }}>
+            <div style={{
+              fontSize: 43,
+              fontWeight: 900,
+              color: '#090909',
+              fontFamily: 'sans-serif',
+              lineHeight: 1,
+              letterSpacing: '-1px',
+            }}>
+              8
             </div>
           </div>
         </div>
 
-        {/* Three dots */}
-        <div style={{ position: 'absolute', bottom: 8, display: 'flex', gap: 4 }}>
-          <div style={{ width: 10, height: 10, borderRadius: 9999, background: '#f5c518', display: 'flex' }} />
-          <div style={{ width: 10, height: 10, borderRadius: 9999, background: '#60a5fa', display: 'flex' }} />
-          <div style={{ width: 10, height: 10, borderRadius: 9999, background: '#f87171', display: 'flex' }} />
-        </div>
+        {/* Contact shadow */}
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          width: '72%', height: '6%',
+          borderRadius: '50%',
+          background: 'radial-gradient(ellipse at 50% 60%, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 50%, transparent 75%)',
+          display: 'flex',
+        }} />
+
       </div>
     ),
     { ...size },
