@@ -32,7 +32,7 @@ export default function Icon() {
           position: 'absolute',
           width: 490, height: 490,
           borderRadius: '50%',
-          background: 'conic-gradient(from 130deg, #f0d060, #e8c547 12%, #c9a227 30%, #a07820 52%, #c9a227 68%, #e8c547 82%, #f0d060 92%, #e8c547)',
+          background: 'linear-gradient(140deg, #f0d060 0%, #e8c547 18%, #c9a227 42%, #a07820 58%, #c9a227 76%, #e8c547 90%, #f0d060 100%)',
           display: 'flex',
         }} />
 
