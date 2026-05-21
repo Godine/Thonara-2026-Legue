@@ -2,22 +2,18 @@ export const revalidate = 30
 
 import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
-import { fetchStandings, fetchRecentSession, fetchLiveGame } from '@/lib/queries'
+import { fetchStandings, fetchLiveGame, fetchCompletedGames, fetchAllShots } from '@/lib/queries'
 import { generateNarrative } from '@/lib/narrative'
+import {
+  ACHIEVEMENTS, RARITY_STYLES,
+  computeAllAchievements, computeAllProgress,
+} from '@/lib/achievements'
 import Link from 'next/link'
-import { format, isToday, isYesterday, parseISO } from 'date-fns'
 import PlayerAvatar from '@/components/PlayerAvatar'
 import PullToRefresh from '@/components/PullToRefresh'
-import { PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
+import { PLAYERS, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 
 const RANK_BADGES = ['🥇', '🥈', '🥉']
-
-function sessionDateLabel(dateStr: string) {
-  const d = parseISO(dateStr + 'T12:00:00')
-  if (isToday(d))      return 'Today'
-  if (isYesterday(d))  return 'Yesterday'
-  return format(d, 'EEE, MMM d')
-}
 
 // ── Streaming data components ─────────────────────────────────────────
 
@@ -158,68 +154,90 @@ async function StandingsStream() {
   )
 }
 
-async function RecentSessionStream() {
+async function NearBadgesStream() {
   const db = createClient()
-  const recent = await fetchRecentSession(db)
-  if (!recent) return null
+  const [games, shots] = await Promise.all([
+    fetchCompletedGames(db),
+    fetchAllShots(db),
+  ])
+
+  const earnedMap  = computeAllAchievements(games as any, shots as any)
+  const progressMap = computeAllProgress(games as any, shots as any)
+
+  const playerData = PLAYERS.map(username => {
+    const style   = PLAYER_STYLES[username as PlayerUsername]
+    const earned  = new Set(earnedMap[username] ?? [])
+    const prog    = progressMap[username] ?? {}
+
+    const candidates = ACHIEVEMENTS
+      .filter(a => !earned.has(a.id) && prog[a.id] !== undefined)
+      .map(a => ({
+        achievement: a,
+        pct:     (prog[a.id].current / prog[a.id].target) * 100,
+        current: prog[a.id].current,
+        target:  prog[a.id].target,
+        label:   prog[a.id].label,
+      }))
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, 2)
+
+    return { username: username as PlayerUsername, style, candidates }
+  })
 
   return (
     <section className="px-4 pb-10">
       <div className="flex items-center justify-between mb-3">
-        <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim">LAST SESSION</p>
-        <span className="font-body text-xs text-pool-chalk-dim">{sessionDateLabel(recent.date)}</span>
+        <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim">CLOSE TO EARNING</p>
+        <Link href="/achievements" className="font-body text-xs text-pool-gold hover:text-pool-gold-light transition-colors">
+          All badges →
+        </Link>
       </div>
 
-      <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
-        <div className="divide-y divide-pool-border">
-          {(recent.games as any[])
-            ?.sort((a: any, b: any) => a.game_number - b.game_number)
-            .map((game: any) => {
-              const p1Style = PLAYER_STYLES[game.player1?.username as PlayerUsername]
-              const p2Style = PLAYER_STYLES[game.player2?.username as PlayerUsername]
-              const p1Won   = game.winner_id === game.player1?.id
-              const p2Won   = game.winner_id === game.player2?.id
+      <div className="grid grid-cols-3 gap-2">
+        {playerData.map(({ username, style, candidates }) => (
+          <div key={username} className="flex flex-col gap-2">
 
+            {/* Player label */}
+            <div className="flex items-center gap-1.5 px-0.5">
+              <PlayerAvatar username={username} size={20} />
+              <span className="font-body text-xs truncate" style={{ color: style?.color }}>
+                {style?.label}
+              </span>
+            </div>
+
+            {/* Badge cards */}
+            {candidates.length === 0 ? (
+              <div className="rounded-xl border border-pool-border p-3 flex flex-col items-center justify-center gap-1 min-h-[72px]">
+                <span className="text-base">🏅</span>
+                <p className="font-body text-[9px] text-pool-chalk-dim text-center leading-snug">All earned!</p>
+              </div>
+            ) : candidates.map(({ achievement, pct, current, target, label }) => {
+              const rs = RARITY_STYLES[achievement.rarity]
+              const barPct = Math.min(100, Math.round(pct))
               return (
-                <div key={game.id} className="flex items-center gap-3 px-3 py-2.5">
-                  <span className="font-heading text-xs text-pool-chalk-dim w-6 shrink-0">G{game.game_number}</span>
-
-                  <div className={`flex items-center gap-1.5 flex-1 justify-end transition-opacity ${!game.is_complete ? '' : p1Won ? 'opacity-100' : 'opacity-35'}`}>
-                    <span className="font-heading text-sm" style={{ color: p1Won ? p1Style?.color : undefined }}>
-                      {game.player1?.display_name}
-                    </span>
-                    {game.player1?.username && (
-                      <PlayerAvatar username={game.player1.username as PlayerUsername} size={26} />
-                    )}
+                <div
+                  key={achievement.id}
+                  className="rounded-xl border p-2.5 flex flex-col gap-1.5"
+                  style={{ borderColor: rs.border, background: rs.bg }}
+                >
+                  <div className="text-lg leading-none">{achievement.icon}</div>
+                  <p className="font-heading text-[10px] tracking-wide text-pool-chalk leading-snug">
+                    {achievement.name}
+                  </p>
+                  <div className="h-1 bg-pool-border rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${barPct}%`, backgroundColor: rs.color }}
+                    />
                   </div>
-
-                  <div className="shrink-0 text-center w-10">
-                    {game.is_complete ? (
-                      <span className="font-heading text-xs text-pool-gold">✓</span>
-                    ) : (
-                      <span className="font-body text-xs text-pool-chalk-dim">vs</span>
-                    )}
-                  </div>
-
-                  <div className={`flex items-center gap-1.5 flex-1 transition-opacity ${!game.is_complete ? '' : p2Won ? 'opacity-100' : 'opacity-35'}`}>
-                    {game.player2?.username && (
-                      <PlayerAvatar username={game.player2.username as PlayerUsername} size={26} />
-                    )}
-                    <span className="font-heading text-sm" style={{ color: p2Won ? p2Style?.color : undefined }}>
-                      {game.player2?.display_name}
-                    </span>
-                  </div>
+                  <p className="font-body text-[9px] text-pool-chalk-dim tabular-nums">
+                    {label ?? `${current}/${target}`}
+                  </p>
                 </div>
               )
             })}
-        </div>
-
-        <Link
-          href={`/session/${recent.id}`}
-          className="flex items-center justify-center gap-1 py-3 text-sm font-body text-pool-chalk-dim hover:text-pool-gold transition-colors border-t border-pool-border"
-        >
-          View full session →
-        </Link>
+          </div>
+        ))}
       </div>
     </section>
   )
@@ -256,25 +274,24 @@ function StandingsSkeleton() {
   )
 }
 
-function RecentSessionSkeleton() {
+function NearBadgesSkeleton() {
   return (
     <section className="px-4 pb-10">
       <div className="flex items-center justify-between mb-3">
-        <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim">LAST SESSION</p>
+        <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim">CLOSE TO EARNING</p>
       </div>
-      <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden animate-pulse">
+      <div className="grid grid-cols-3 gap-2 animate-pulse">
         {[0, 1, 2].map(i => (
-          <div key={i} className="flex items-center gap-3 px-3 py-2.5 border-b border-pool-border">
-            <div className="w-6 h-3 bg-pool-border rounded" />
-            <div className="flex-1 flex justify-end gap-2">
-              <div className="h-3 bg-pool-border rounded w-14" />
-              <div className="w-6 h-6 rounded-full bg-pool-border" />
-            </div>
-            <div className="w-10 h-3 bg-pool-border rounded mx-auto" />
-            <div className="flex-1 flex gap-2">
-              <div className="w-6 h-6 rounded-full bg-pool-border" />
-              <div className="h-3 bg-pool-border rounded w-14" />
-            </div>
+          <div key={i} className="flex flex-col gap-2">
+            <div className="h-4 bg-pool-border rounded w-full" />
+            {[0, 1].map(j => (
+              <div key={j} className="rounded-xl border border-pool-border p-2.5 space-y-1.5">
+                <div className="h-5 w-5 bg-pool-border rounded" />
+                <div className="h-2.5 bg-pool-border rounded w-3/4" />
+                <div className="h-1 bg-pool-border rounded w-full" />
+                <div className="h-2 bg-pool-border rounded w-1/2" />
+              </div>
+            ))}
           </div>
         ))}
       </div>
@@ -358,9 +375,9 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* ── LAST SESSION (streams in) ─────────────────────────────────── */}
-      <Suspense fallback={<RecentSessionSkeleton />}>
-        <RecentSessionStream />
+      {/* ── CLOSE TO EARNING (streams in) ────────────────────────────── */}
+      <Suspense fallback={<NearBadgesSkeleton />}>
+        <NearBadgesStream />
       </Suspense>
     </div>
   )
