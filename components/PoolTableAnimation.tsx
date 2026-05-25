@@ -10,6 +10,7 @@ export interface PoolTableProps {
   lastShot: Shot | null
   isComplete: boolean
   winnerId: string | null
+  height?: number
 }
 
 const HEAD_R = 11
@@ -66,7 +67,7 @@ function Figure({ cx, cy, username, color }: { cx: number; cy: number; username:
   )
 }
 
-export default function PoolTableAnimation({ p1, p2, lastShot }: PoolTableProps) {
+export default function PoolTableAnimation({ p1, p2, lastShot, height = 140 }: PoolTableProps) {
   const c1 = PLAYER_STYLES[p1.username as PlayerUsername]?.color ?? '#aaa'
   const c2 = PLAYER_STYLES[p2.username as PlayerUsername]?.color ?? '#aaa'
 
@@ -149,7 +150,7 @@ export default function PoolTableAnimation({ p1, p2, lastShot }: PoolTableProps)
   }, [lastShot?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div style={{ width: '100%', height: 140, borderRadius: 12, overflow: 'hidden', background: '#0d2010' }}>
+    <div style={{ width: '100%', height, borderRadius: 12, overflow: 'hidden', background: '#0d2010' }}>
       <svg viewBox="0 0 300 150" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
         <defs>
           <radialGradient id="cue-grad" cx="38%" cy="32%" r="60%">

@@ -474,108 +474,90 @@ export default function GamePage() {
     <div className="max-w-lg mx-auto flex flex-col min-h-dvh">
 
       {/* Header */}
-      <div className="px-4 pt-4 pb-3">
-        <Link href={`/session/${sessionId}`} className="text-pool-chalk-dim text-sm font-body hover:text-pool-gold transition-colors">
-          ← Session
+      <div className="flex items-center gap-2 px-4 pt-3 pb-2">
+        <Link href={`/session/${sessionId}`} className="font-body text-sm text-pool-chalk-dim hover:text-pool-gold transition-colors shrink-0">
+          ← G{game.game_number}
         </Link>
-        <div className="flex items-center justify-between mt-2">
-          <div>
-            <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim">Game {game.game_number}</p>
-            <h1 className="font-heading text-3xl tracking-wider text-pool-chalk leading-tight">
-              <span style={{ color: p1Style?.color }}>{p1.display_name.toUpperCase()}</span>
-              <span className="text-pool-chalk-dim text-xl"> vs </span>
-              <span style={{ color: p2Style?.color }}>{p2.display_name.toUpperCase()}</span>
-            </h1>
-          </div>
-          <div className="text-right shrink-0">
-            {game.is_complete ? (
-              <span className="text-xs font-body text-pool-green-bright bg-pool-green-bright/10 px-3 py-1 rounded-full border border-pool-green-bright/30">
-                Complete
-              </span>
-            ) : timerStarted ? (
-              <>
-                <p className="font-heading text-2xl text-pool-chalk tabular-nums">{formatTime(elapsed)}</p>
-                <p className="font-body text-xs text-pool-chalk-dim">elapsed</p>
-              </>
-            ) : null}
-          </div>
+        <h1 className="font-heading text-sm tracking-wider leading-none flex-1 text-center">
+          <span style={{ color: p1Style?.color }}>{p1.display_name.toUpperCase()}</span>
+          <span className="text-pool-chalk-dim"> vs </span>
+          <span style={{ color: p2Style?.color }}>{p2.display_name.toUpperCase()}</span>
+        </h1>
+        <div className="shrink-0 text-right min-w-[56px]">
+          {game.is_complete ? (
+            <span className="font-body text-xs text-pool-green-bright">✓ Done</span>
+          ) : timerStarted ? (
+            <span className="font-heading text-sm text-pool-chalk tabular-nums">{formatTime(elapsed)}</span>
+          ) : currentUsername ? (
+            <span className="font-body text-[10px] text-pool-chalk-dim">📝 {PLAYER_STYLES[currentUsername]?.label}</span>
+          ) : null}
         </div>
-        {!game.is_complete && (
-          <p className="text-xs font-body text-pool-chalk-dim mt-1">
-            {currentUsername
-              ? `📝 Scoring as ${PLAYER_STYLES[currentUsername]?.label}`
-              : `📱 ${schedule ? `${PLAYER_STYLES[schedule.scorer as PlayerUsername]?.label} scoring` : 'Watching live'} — tap a player above to score`}
-          </p>
-        )}
-        <div className="mt-2 h-px bg-gradient-to-r from-pool-gold/30 to-transparent" />
       </div>
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-2 gap-3 px-4 mb-2">
-        {[
-          { player: p1, stats: p1Stats, style: p1Style, oddsVal: odds.p1 },
-          { player: p2, stats: p2Stats, style: p2Style, oddsVal: odds.p2 },
-        ].map(({ player, stats, style, oddsVal }) => {
-          const isWinner = game.winner_id === player.id
-          return (
-            <div key={player.id} className={`rounded-2xl border p-3 transition-all ${isWinner ? 'bg-pool-gold/10 border-pool-gold/50 glow-gold' : 'bg-pool-surface border-pool-border'}`}>
-              <div className="flex items-center gap-2 mb-2">
-                {style && <PlayerBall number={style.number} color={style.color} size={28} />}
-                <span className="font-heading text-base tracking-wide" style={{ color: style?.color }}>
-                  {player.display_name.toUpperCase()}
-                </span>
-                {isWinner && <span className="text-sm">🏆</span>}
+      {/* Score strip */}
+      <div className="flex items-center px-4 mb-2 gap-2">
+        {/* P1 */}
+        <div className={`flex items-center gap-2 rounded-xl px-2 py-1.5 transition-all ${game.winner_id === p1.id ? 'bg-pool-gold/10' : ''}`}>
+          {p1Style && <PlayerBall number={p1Style.number} color={p1Style.color} size={22} />}
+          <div>
+            <div className="font-heading text-3xl text-pool-chalk tabular-nums leading-none">{p1Stats.potted}</div>
+            <div className="flex gap-1.5 mt-0.5 h-3">
+              {p1Stats.errors > 0 && <span className="font-body text-[10px] text-pool-red leading-none">{p1Stats.errors} err</span>}
+              {p1Stats.lucky > 0 && <span className="font-body text-[10px] text-pool-gold leading-none">{p1Stats.lucky}★</span>}
+              {game.winner_id === p1.id && <span className="font-body text-[10px] text-pool-gold leading-none">🏆</span>}
+            </div>
+          </div>
+        </div>
+
+        {/* Centre: split win-odds bar */}
+        <div className="flex-1 min-w-0 px-1">
+          {(!game.is_complete && (p1Stats.shots + p2Stats.shots > 0 || Object.keys(histStats).length > 0)) ? (
+            <>
+              <div className="h-2 rounded-full overflow-hidden flex" style={{ background: '#1f3525' }}>
+                <div className="h-full transition-all duration-500" style={{ width: `${odds.p1}%`, backgroundColor: p1Style?.color }} />
+                <div className="h-full transition-all duration-500" style={{ width: `${odds.p2}%`, backgroundColor: p2Style?.color }} />
               </div>
-              <div className="flex justify-between items-baseline">
-                <span className="text-xs font-body text-pool-chalk-dim">Potted</span>
-                <span className="font-heading text-2xl text-pool-chalk">{stats.potted}</span>
+              <div className="flex justify-between items-center mt-0.5">
+                <button onClick={() => setShowOddsInfo(true)} className="font-heading text-[11px] leading-none hover:opacity-80 transition-opacity" style={{ color: p1Style?.color }}>{odds.p1}%</button>
+                <span className="font-body text-[9px] text-pool-chalk-dim leading-none">win odds</span>
+                <span className="font-heading text-[11px] leading-none" style={{ color: p2Style?.color }}>{odds.p2}%</span>
               </div>
-              <div className="flex justify-between text-xs font-body text-pool-chalk-dim">
-                <span>Shots: {stats.shots}</span>
-                <span>
-                  {stats.errors > 0 && <span className="text-pool-red mr-2">{stats.errors} err</span>}
-                  {stats.lucky > 0 && <span className="text-pool-gold">{stats.lucky} ★</span>}
-                </span>
-              </div>
-              {stats.shots > 0 && (
-                <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
-                  <div className="h-full rounded-full transition-all duration-300"
-                    style={{ width: `${Math.round((stats.ownPotted / stats.shots) * 100)}%`, backgroundColor: style?.color }} />
-                </div>
-              )}
-              {!game.is_complete && (p1Stats.shots + p2Stats.shots > 0 || Object.keys(histStats).length > 0) && (
-                <div className="mt-2 pt-2 border-t border-pool-border/50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs font-body text-pool-chalk-dim">Win chance</span>
-                      <button
-                        onClick={() => setShowOddsInfo(true)}
-                        className="text-pool-chalk-dim/40 hover:text-pool-chalk-dim transition-colors leading-none text-xs"
-                        aria-label="How odds are calculated"
-                      >ⓘ</button>
-                    </div>
-                    <span className="font-heading text-base" style={{ color: style?.color }}>{oddsVal}%</span>
-                  </div>
-                  <div className="h-1 bg-pool-border rounded-full overflow-hidden mt-1">
-                    <div className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${oddsVal}%`, backgroundColor: style?.color }} />
-                  </div>
-                </div>
+            </>
+          ) : (
+            <div className="text-center">
+              {game.is_complete && game.winner_id ? (
+                <p className="font-heading text-xs text-pool-gold tracking-wider">🏆 {game.winner?.display_name.toUpperCase()} WINS</p>
+              ) : (
+                <p className="font-body text-xs text-pool-chalk-dim">vs</p>
               )}
             </div>
-          )
-        })}
+          )}
+        </div>
+
+        {/* P2 */}
+        <div className={`flex items-center gap-2 rounded-xl px-2 py-1.5 transition-all ${game.winner_id === p2.id ? 'bg-pool-gold/10' : ''}`}>
+          <div className="text-right">
+            <div className="font-heading text-3xl text-pool-chalk tabular-nums leading-none">{p2Stats.potted}</div>
+            <div className="flex gap-1.5 mt-0.5 h-3 justify-end">
+              {p2Stats.errors > 0 && <span className="font-body text-[10px] text-pool-red leading-none">{p2Stats.errors} err</span>}
+              {p2Stats.lucky > 0 && <span className="font-body text-[10px] text-pool-gold leading-none">{p2Stats.lucky}★</span>}
+              {game.winner_id === p2.id && <span className="font-body text-[10px] text-pool-gold leading-none">🏆</span>}
+            </div>
+          </div>
+          {p2Style && <PlayerBall number={p2Style.number} color={p2Style.color} size={22} />}
+        </div>
       </div>
 
       {/* Pool table animation — only while game is live */}
       {!game.is_complete && (
-        <div className="px-4 mb-3">
+        <div className="px-4 mb-1.5">
           <PoolTableAnimation
             p1={p1}
             p2={p2}
             lastShot={shots.length > 0 ? shots[shots.length - 1] : null}
             isComplete={game.is_complete}
             winnerId={game.winner_id}
+            height={95}
           />
         </div>
       )}
@@ -686,7 +668,7 @@ export default function GamePage() {
       ) : canEdit ? (
 
         /* ── SHOT ENTRY (or BREAK entry on first shot) ── */
-        <div className="px-4 flex-1 flex flex-col">
+        <div className="px-4 flex flex-col">
           {shots.length === 0 ? (
 
             /* Break recording */
@@ -798,52 +780,74 @@ export default function GamePage() {
 
             /* Regular shot buttons */
             <>
-              <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-2 text-center">
-                TAP TO RECORD · HOLD POT FOR MULTI-BALL
-              </p>
-              {/* Color assignment bar */}
-              {colorAssignment ? (
-                <div className="flex items-center mb-3 gap-2 bg-pool-surface rounded-lg border border-pool-border px-3 py-1.5">
-                  <div className="flex items-center gap-1.5 flex-1">
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: colorAssignment[p1.id] === 'yellow' ? '#facc15' : '#ef4444' }} />
-                    <span className="font-body text-xs text-pool-chalk-dim">{p1.display_name}</span>
-                  </div>
-                  <button
-                    onClick={() => setColorAssignment({ [p1.id]: colorAssignment[p1.id] === 'yellow' ? 'red' : 'yellow', [p2.id]: colorAssignment[p2.id] === 'yellow' ? 'red' : 'yellow' })}
-                    className="font-body text-xs text-pool-chalk-dim/50 hover:text-pool-chalk-dim transition-colors px-1"
-                  >⇄</button>
-                  <div className="flex items-center gap-1.5 flex-1 justify-end">
-                    <span className="font-body text-xs text-pool-chalk-dim">{p2.display_name}</span>
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: colorAssignment[p2.id] === 'yellow' ? '#facc15' : '#ef4444' }} />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="font-body text-xs text-pool-chalk-dim shrink-0">On yellow:</span>
-                  {[p1, p2].map(player => (
+              {/* Color + turn strip */}
+              <div className="flex items-center mb-2 gap-2">
+                {colorAssignment ? (
+                  <div className="flex items-center flex-1 gap-2 bg-pool-surface rounded-lg border border-pool-border px-2.5 py-1">
+                    <div className="flex items-center gap-1.5 flex-1">
+                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colorAssignment[p1.id] === 'yellow' ? '#facc15' : '#ef4444' }} />
+                      <span className="font-body text-xs text-pool-chalk-dim">{p1.display_name}</span>
+                    </div>
                     <button
-                      key={player.id}
-                      onClick={() => {
-                        const otherId = player.id === p1.id ? p2.id : p1.id
-                        setColorAssignment({ [player.id]: 'yellow', [otherId]: 'red' })
-                      }}
-                      className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-pool-border font-body text-xs text-pool-chalk-dim hover:border-yellow-400/50 hover:text-pool-chalk transition-all active:scale-95"
-                    >
-                      <div className="w-2.5 h-2.5 rounded-full bg-yellow-400 shrink-0" />
-                      {player.display_name}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-3 flex-1">
+                      onClick={() => setColorAssignment({ [p1.id]: colorAssignment[p1.id] === 'yellow' ? 'red' : 'yellow', [p2.id]: colorAssignment[p2.id] === 'yellow' ? 'red' : 'yellow' })}
+                      className="font-body text-xs text-pool-chalk-dim/50 hover:text-pool-chalk-dim transition-colors px-1"
+                    >⇄</button>
+                    <div className="flex items-center gap-1.5 flex-1 justify-end">
+                      <span className="font-body text-xs text-pool-chalk-dim">{p2.display_name}</span>
+                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colorAssignment[p2.id] === 'yellow' ? '#facc15' : '#ef4444' }} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 flex-1">
+                    <span className="font-body text-xs text-pool-chalk-dim shrink-0">Yellow:</span>
+                    {[p1, p2].map(player => (
+                      <button
+                        key={player.id}
+                        onClick={() => {
+                          const otherId = player.id === p1.id ? p2.id : p1.id
+                          setColorAssignment({ [player.id]: 'yellow', [otherId]: 'red' })
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg border border-pool-border font-body text-xs text-pool-chalk-dim hover:border-yellow-400/50 hover:text-pool-chalk transition-all active:scale-95"
+                      >
+                        <div className="w-2 h-2 rounded-full bg-yellow-400 shrink-0" />
+                        {player.display_name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {lastShot && (() => {
+                  const shotBalls = lastShot.balls_potted ?? (lastShot.potted ? 1 : 0)
+                  const oppBalls  = lastShot.opponent_balls_potted ?? 0
+                  const lLabel = lastShot.is_error
+                    ? oppBalls > 0 ? `Foul +${oppBalls}` : shotBalls > 0 ? 'In-off' : 'Error'
+                    : lastShot.is_lucky ? '★ Lucky'
+                    : shotBalls > 1 ? `×${shotBalls}`
+                    : shotBalls === 1 ? '● Pot'
+                    : '✕ Miss'
+                  const lColor = lastShot.is_error ? '#ef4444' : lastShot.is_lucky ? '#c9a227' : shotBalls > 0 ? '#22c55e' : '#7a786f'
+                  const lStyle = lastShot.player_id === p1.id ? p1Style : p2Style
+                  return (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="font-body text-[10px] text-pool-chalk-dim">Last:</span>
+                      <span className="font-body text-[10px] font-medium" style={{ color: lColor }}>{lLabel}</span>
+                      <span className="font-body text-[10px]" style={{ color: lStyle?.color }}>({(lastShot.player_id === p1.id ? p1 : p2).display_name})</span>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
                 {[{ player: p1, style: p1Style }, { player: p2, style: p2Style }].map(({ player, style }) => {
                   const isFlashing = flash?.playerId === player.id
+                  const isMyTurn = player.id === p1.id ? isP1Turn : !isP1Turn
                   return (
-                    <div key={player.id} className={`flex flex-col gap-2 transition-all duration-100 ${isFlashing ? 'scale-[0.97] brightness-125' : ''}`}>
-                      <div className="text-center py-1">
-                        <span className="font-heading text-sm tracking-widest" style={{ color: style?.color }}>
+                    <div key={player.id} className={`flex flex-col gap-1.5 transition-all duration-100 ${isFlashing ? 'scale-[0.97] brightness-125' : ''}`}>
+                      <div className="flex items-center justify-center gap-1.5 py-0.5">
+                        {isMyTurn && <span className="font-body text-[10px] text-pool-chalk-dim">▶</span>}
+                        <span className={`font-heading text-sm tracking-widest transition-all ${isMyTurn ? 'opacity-100' : 'opacity-50'}`} style={{ color: style?.color }}>
                           {player.display_name.toUpperCase()}
                         </span>
+                        {isMyTurn && <span className="font-body text-[10px] text-pool-chalk-dim">◀</span>}
                       </div>
                       {shotButtons.map(btn =>
                         btn.type === 'potted' ? (
@@ -854,7 +858,7 @@ export default function GamePage() {
                             onPointerLeave={handlePotPressCancel}
                             onPointerCancel={handlePotPressCancel}
                             disabled={saving}
-                            className={`shot-btn w-full py-4 rounded-xl border font-heading text-lg tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-50 select-none ${btn.classes}`}
+                            className={`shot-btn w-full py-3 rounded-xl border font-heading text-base tracking-wider flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 select-none ${btn.classes}`}
                           >
                             <span>{btn.icon}</span>
                             <span>{btn.label}</span>
@@ -864,7 +868,7 @@ export default function GamePage() {
                             key={btn.type}
                             onClick={() => recordShot(player.id, btn.type)}
                             disabled={saving}
-                            className={`shot-btn w-full ${btn.small ? 'py-2.5 text-sm' : 'py-4 text-lg'} rounded-xl border font-heading tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-50 ${btn.classes}`}
+                            className={`shot-btn w-full ${btn.small ? 'py-1.5 text-xs' : 'py-3 text-base'} rounded-xl border font-heading tracking-wider flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 ${btn.classes}`}
                           >
                             <span>{btn.icon}</span>
                             <span>{btn.label}</span>
@@ -875,7 +879,7 @@ export default function GamePage() {
                   )
                 })}
               </div>
-              <div className="flex gap-3 py-4">
+              <div className="flex gap-3 pt-2 pb-2">
                 <button
                   onClick={undoLastShot}
                   disabled={saving || shots.length === 0}
@@ -922,21 +926,22 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* Shot log */}
+      {/* Pending sync indicator (live only) */}
       {pendingCount > 0 && (
-        <div className="mx-4 mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+        <div className="mx-4 mb-1 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
           <span className="font-body text-xs text-amber-400">
-            {pendingCount} shot{pendingCount !== 1 ? 's' : ''} pending sync — will save when back online
+            {pendingCount} shot{pendingCount !== 1 ? 's' : ''} pending sync
           </span>
         </div>
       )}
 
-      {shots.length > 0 && (
+      {/* Shot log — recap only */}
+      {game.is_complete && shots.length > 0 && (
         <div className="mx-4 mb-4 bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
-          <p className="font-heading text-xs tracking-widest text-pool-chalk-dim px-4 pt-3 pb-2">LAST SHOTS</p>
+          <p className="font-heading text-xs tracking-widest text-pool-chalk-dim px-4 pt-3 pb-2">SHOT LOG</p>
           <div className="divide-y divide-pool-border">
-            {shots.slice(-5).reverse().map((shot, i) => {
+            {shots.slice(-8).reverse().map((shot, i) => {
               const shooter = shot.player_id === p1.id ? p1 : p2
               const shooterStyle = shot.player_id === p1.id ? p1Style : p2Style
               const shotBalls = shot.balls_potted ?? (shot.potted ? 1 : 0)
