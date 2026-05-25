@@ -1,26 +1,26 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export default function OfflineBanner() {
-  const [offline, setOffline] = useState(false)
-  const [wasOffline, setWasOffline] = useState(false)
-  const [showBackOnline, setShowBackOnline] = useState(false)
+  const [status, setStatus] = useState<'online' | 'offline' | 'reconnected'>('online')
+  const wasOfflineRef = useRef(false)
 
   useEffect(() => {
-    setOffline(!navigator.onLine)
+    if (!navigator.onLine) {
+      wasOfflineRef.current = true
+      setStatus('offline')
+    }
 
     const handleOffline = () => {
-      setOffline(true)
-      setWasOffline(true)
-      setShowBackOnline(false)
+      wasOfflineRef.current = true
+      setStatus('offline')
     }
 
     const handleOnline = () => {
-      setOffline(false)
-      if (wasOffline) {
-        setShowBackOnline(true)
-        setTimeout(() => setShowBackOnline(false), 3000)
+      if (wasOfflineRef.current) {
+        setStatus('reconnected')
+        setTimeout(() => setStatus('online'), 3000)
       }
     }
 
@@ -30,27 +30,27 @@ export default function OfflineBanner() {
       window.removeEventListener('offline', handleOffline)
       window.removeEventListener('online', handleOnline)
     }
-  }, [wasOffline])
+  }, [])
 
-  if (!offline && !showBackOnline) return null
+  if (status === 'online') return null
 
   return (
     <div
-      className="fixed top-14 inset-x-0 z-40 flex items-center justify-center gap-2 py-2 font-body text-xs tracking-wide transition-all"
+      className="fixed top-14 inset-x-0 z-40 flex items-center justify-center gap-2 py-2 font-body text-xs tracking-wide"
       style={{
-        background: offline ? '#7a2020' : '#1a4731',
+        background: status === 'offline' ? '#7a2020' : '#1a4731',
         color: '#f0ede6',
       }}
     >
-      {offline ? (
+      {status === 'offline' ? (
         <>
           <span>📵</span>
-          <span>You&apos;re offline — showing cached data</span>
+          <span>You&apos;re offline — shots will sync when reconnected</span>
         </>
       ) : (
         <>
           <span>✓</span>
-          <span>Back online</span>
+          <span>Back online — syncing</span>
         </>
       )}
     </div>

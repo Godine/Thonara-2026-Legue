@@ -1,9 +1,16 @@
-const CACHE_VERSION = 'thonara-v1'
+const CACHE_VERSION = 'thonara-v2'
 const STATIC_CACHE  = 'thonara-static-v1'
+const PRECACHE_URLS = ['/', '/stats', '/history', '/achievements', '/rules', '/records']
 
 // ── Lifecycle ─────────────────────────────────────────────────────────
 
-self.addEventListener('install', () => self.skipWaiting())
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_VERSION)
+      .then(cache => cache.addAll(PRECACHE_URLS).catch(() => {}))
+      .then(() => self.skipWaiting())
+  )
+})
 
 self.addEventListener('activate', event => {
   event.waitUntil(
@@ -40,17 +47,18 @@ self.addEventListener('fetch', event => {
     return
   }
 
-  // Player photos and app icons — cache forever
+  // Player photos, icons, manifest — cache forever
   if (
     url.pathname.startsWith('/photos/') ||
     url.pathname === '/icon' ||
-    url.pathname === '/apple-icon'
+    url.pathname === '/apple-icon' ||
+    url.pathname === '/manifest.json'
   ) {
     event.respondWith(cacheFirst(request, STATIC_CACHE))
     return
   }
 
-  // All same-origin pages — network first, fall back to cache
+  // All same-origin pages — network first with 4s timeout, fall back to cache
   if (url.origin === self.location.origin) {
     event.respondWith(networkFirst(request))
     return
@@ -72,14 +80,19 @@ async function cacheFirst(request, cacheName) {
 }
 
 async function networkFirst(request) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 4000)
+
   try {
-    const response = await fetch(request)
+    const response = await fetch(request, { signal: controller.signal })
+    clearTimeout(timeoutId)
     if (response.ok && response.status < 400) {
       const cache = await caches.open(CACHE_VERSION)
       cache.put(request, response.clone())
     }
     return response
   } catch {
+    clearTimeout(timeoutId)
     const cached = await caches.match(request)
     if (cached) return cached
 

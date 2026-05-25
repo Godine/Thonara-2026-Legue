@@ -66,10 +66,13 @@ export default function GamePage() {
   const [breakChosenColor, setBreakChosenColor] = useState<'yellow' | 'red' | null>(null)
   const [potPopup, setPotPopup]         = useState<PotPopupState | null>(null)
   const [colorAssignment, setColorAssignment] = useState<Record<string, 'yellow' | 'red'> | null>(null)
+  const [pendingCount, setPendingCount] = useState(0)
   const prevCompleteRef   = useRef<boolean | undefined>(undefined)
   const timerStartRef     = useRef<number | null>(null)
   const longPressTimer    = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressTriggered = useRef(false)
+  const pendingQueue      = useRef<Array<Parameters<typeof insertShot>[1]>>([])
+  const flushingRef       = useRef(false)
 
   const loadGame = useCallback(async () => {
     const [gameData, shotsData] = await Promise.all([
@@ -143,6 +146,31 @@ export default function GamePage() {
     setColorAssignment({ [pid]: color, [otherId]: color === 'yellow' ? 'red' : 'yellow' })
   }, [shots, game?.player1_id, game?.player2_id]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    async function flushPending() {
+      if (flushingRef.current || pendingQueue.current.length === 0) return
+      flushingRef.current = true
+      const queue = [...pendingQueue.current]
+      pendingQueue.current = []
+      setPendingCount(0)
+      const failed: typeof queue = []
+      for (const shot of queue) {
+        try {
+          await insertShot(db, shot) // eslint-disable-line react-hooks/exhaustive-deps
+        } catch {
+          failed.push(shot)
+        }
+      }
+      if (failed.length > 0) {
+        pendingQueue.current = [...failed, ...pendingQueue.current]
+        setPendingCount(pendingQueue.current.length)
+      }
+      flushingRef.current = false
+    }
+    window.addEventListener('online', flushPending)
+    return () => window.removeEventListener('online', flushPending)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const haptic = (pattern: number | number[]) => {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(pattern)
   }
@@ -180,7 +208,7 @@ export default function GamePage() {
       created_at: new Date().toISOString(),
     }
     setShots(prev => [...prev, optimistic])
-    await insertShot(db, {
+    const shotData: Parameters<typeof insertShot>[1] = {
       game_id: gameId,
       player_id: playerId,
       potted: isPotted,
@@ -190,7 +218,13 @@ export default function GamePage() {
       is_lucky: optimistic.is_lucky,
       is_error: optimistic.is_error,
       shot_number: newShotNumber,
-    })
+    }
+    try {
+      await insertShot(db, shotData)
+    } catch {
+      pendingQueue.current.push(shotData)
+      setPendingCount(pendingQueue.current.length)
+    }
     setSaving(false)
   }
 
@@ -280,7 +314,14 @@ export default function GamePage() {
     }
     const now = Date.now()
     setShots(rows.map((r, i) => ({ id: `temp-${now}-${i}`, created_at: new Date().toISOString(), ...r })))
-    await insertShots(db, rows)
+    try {
+      await insertShots(db, rows)
+    } catch {
+      rows.forEach(r => {
+        pendingQueue.current.push(r)
+      })
+      setPendingCount(pendingQueue.current.length)
+    }
     haptic((totalColored + (breakBlack ? 1 : 0)) > 0 ? [30, 15, 30] : 20)
     setSaving(false)
     if (breakChosenColor && game) {
@@ -298,8 +339,19 @@ export default function GamePage() {
     if (!canEdit || saving || shots.length === 0) return
     const lastShot = shots[shots.length - 1]
     setShots(prev => prev.filter(s => s.id !== lastShot.id))
+    // Also remove from pending queue if it was never saved
+    if (lastShot.id.startsWith('temp-')) {
+      pendingQueue.current = pendingQueue.current.slice(0, -1)
+      setPendingCount(pendingQueue.current.length)
+      return
+    }
     setSaving(true)
-    await deleteShot(db, lastShot.id)
+    try {
+      await deleteShot(db, lastShot.id)
+    } catch {
+      // Re-add the shot if delete failed
+      setShots(prev => [...prev, lastShot])
+    }
     setSaving(false)
   }
 
@@ -871,6 +923,15 @@ export default function GamePage() {
       )}
 
       {/* Shot log */}
+      {pendingCount > 0 && (
+        <div className="mx-4 mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+          <span className="font-body text-xs text-amber-400">
+            {pendingCount} shot{pendingCount !== 1 ? 's' : ''} pending sync — will save when back online
+          </span>
+        </div>
+      )}
+
       {shots.length > 0 && (
         <div className="mx-4 mb-4 bg-pool-surface rounded-2xl border border-pool-border overflow-hidden">
           <p className="font-heading text-xs tracking-widest text-pool-chalk-dim px-4 pt-3 pb-2">LAST SHOTS</p>
