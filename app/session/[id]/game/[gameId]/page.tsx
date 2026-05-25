@@ -22,7 +22,7 @@ import type { Player, Shot } from '@/types/database'
 
 type GameFull = GameWithPlayers
 
-type ShotType = 'potted' | 'lucky' | 'miss' | 'error'
+type ShotType = 'potted' | 'lucky' | 'miss' | 'error' | 'scratch'
 
 interface EndGameState {
   open: boolean
@@ -155,13 +155,16 @@ export default function GamePage() {
     setFlash({ playerId, type })
     setTimeout(() => setFlash(null), 350)
     const hapticPatterns: Record<ShotType, number | number[]> = {
-      potted: 40,
-      lucky:  [10, 5, 10, 5, 10],
-      miss:   15,
-      error:  [20, 10, 20],
+      potted:  40,
+      lucky:   [10, 5, 10, 5, 10],
+      miss:    15,
+      error:   [20, 10, 20],
+      scratch: [40, 10, 20],
     }
     haptic(hapticPatterns[type])
-    const isPotted = type === 'potted' || type === 'lucky'
+    const isPotted = type === 'potted' || type === 'lucky' || type === 'scratch'
+    const isScratch = type === 'scratch'
+    const isError = type === 'error' || type === 'scratch'
     const newShotNumber = shots.length + 1
     const optimistic: Shot = {
       id: `temp-${Date.now()}`,
@@ -170,9 +173,9 @@ export default function GamePage() {
       potted: isPotted,
       balls_potted: isPotted ? 1 : 0,
       opponent_balls_potted: 0,
-      ball_color: (isPotted && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
+      ball_color: (isPotted && !isScratch && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
       is_lucky: type === 'lucky',
-      is_error: type === 'error',
+      is_error: isError,
       shot_number: newShotNumber,
       created_at: new Date().toISOString(),
     }
@@ -183,7 +186,7 @@ export default function GamePage() {
       potted: isPotted,
       balls_potted: isPotted ? 1 : 0,
       opponent_balls_potted: 0,
-      ball_color: (isPotted && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
+      ball_color: (isPotted && !isScratch && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
       is_lucky: optimistic.is_lucky,
       is_error: optimistic.is_error,
       shot_number: newShotNumber,
@@ -407,11 +410,12 @@ export default function GamePage() {
       )
     : null
 
-  const shotButtons: { type: ShotType; label: string; icon: string; classes: string }[] = [
-    { type: 'potted', label: 'POT',   icon: '●', classes: 'bg-pool-green-bright/20 border-pool-green-bright/50 text-pool-green-bright hover:bg-pool-green-bright/30 active:bg-pool-green-bright/40' },
-    { type: 'lucky',  label: 'LUCKY', icon: '★', classes: 'bg-pool-gold/15 border-pool-gold/50 text-pool-gold hover:bg-pool-gold/25 active:bg-pool-gold/35' },
-    { type: 'miss',   label: 'MISS',  icon: '✕', classes: 'bg-pool-surface border-pool-border text-pool-chalk-dim hover:bg-pool-border active:bg-pool-border' },
-    { type: 'error',  label: 'ERR',   icon: '⚠', classes: 'bg-pool-red/15 border-pool-red/40 text-pool-red hover:bg-pool-red/25 active:bg-pool-red/35' },
+  const shotButtons: { type: ShotType; label: string; icon: string; classes: string; small?: boolean }[] = [
+    { type: 'potted',  label: 'POT',    icon: '●',  classes: 'bg-pool-green-bright/20 border-pool-green-bright/50 text-pool-green-bright hover:bg-pool-green-bright/30 active:bg-pool-green-bright/40' },
+    { type: 'lucky',   label: 'LUCKY',  icon: '★',  classes: 'bg-pool-gold/15 border-pool-gold/50 text-pool-gold hover:bg-pool-gold/25 active:bg-pool-gold/35' },
+    { type: 'miss',    label: 'MISS',   icon: '✕',  classes: 'bg-pool-surface border-pool-border text-pool-chalk-dim hover:bg-pool-border active:bg-pool-border' },
+    { type: 'error',   label: 'ERR',    icon: '⚠',  classes: 'bg-pool-red/15 border-pool-red/40 text-pool-red hover:bg-pool-red/25 active:bg-pool-red/35' },
+    { type: 'scratch', label: 'IN-OFF', icon: '●○', classes: 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 active:bg-amber-500/30', small: true },
   ]
 
   return (
@@ -808,7 +812,7 @@ export default function GamePage() {
                             key={btn.type}
                             onClick={() => recordShot(player.id, btn.type)}
                             disabled={saving}
-                            className={`shot-btn w-full py-4 rounded-xl border font-heading text-lg tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-50 ${btn.classes}`}
+                            className={`shot-btn w-full ${btn.small ? 'py-2.5 text-sm' : 'py-4 text-lg'} rounded-xl border font-heading tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-50 ${btn.classes}`}
                           >
                             <span>{btn.icon}</span>
                             <span>{btn.label}</span>
@@ -877,7 +881,7 @@ export default function GamePage() {
               const shotBalls = shot.balls_potted ?? (shot.potted ? 1 : 0)
               const oppBalls = shot.opponent_balls_potted ?? 0
               const label = shot.is_error
-                ? oppBalls > 0 ? `⚠ Foul (+${oppBalls} opp)` : '⚠ Error'
+                ? oppBalls > 0 ? `⚠ Foul (+${oppBalls} opp)` : shotBalls > 0 ? `⚠ In-off (+${shotBalls})` : '⚠ Error'
                 : shot.is_lucky ? '★ Lucky'
                 : shotBalls > 1 ? `● ×${shotBalls}`
                 : shotBalls === 1 ? '● Potted'
