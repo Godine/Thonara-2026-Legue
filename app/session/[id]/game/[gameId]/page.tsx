@@ -21,7 +21,7 @@ import type { Player, Shot } from '@/types/database'
 
 type GameFull = GameWithPlayers
 
-type ShotType = 'potted' | 'lucky' | 'miss' | 'error' | 'scratch'
+type ShotType = 'potted' | 'lucky' | 'miss' | 'error'
 
 interface EndGameState {
   open: boolean
@@ -66,10 +66,14 @@ export default function GamePage() {
   const [potPopup, setPotPopup]         = useState<PotPopupState | null>(null)
   const [colorAssignment, setColorAssignment] = useState<Record<string, 'yellow' | 'red'> | null>(null)
   const [pendingCount, setPendingCount] = useState(0)
+  const [manualActivePlayer, setManualActivePlayer] = useState<string | null>(null)
+  const [inoffPopup, setInoffPopup]     = useState<{ playerId: string; ownBalls: number } | null>(null)
   const prevCompleteRef   = useRef<boolean | undefined>(undefined)
   const timerStartRef     = useRef<number | null>(null)
   const longPressTimer    = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressTriggered = useRef(false)
+  const longPressErrTimer    = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressErrTriggered = useRef(false)
   const pendingQueue      = useRef<Array<Parameters<typeof insertShot>[1]>>([])
   const flushingRef       = useRef(false)
 
@@ -182,16 +186,14 @@ export default function GamePage() {
     setFlash({ playerId, type })
     setTimeout(() => setFlash(null), 350)
     const hapticPatterns: Record<ShotType, number | number[]> = {
-      potted:  40,
-      lucky:   [10, 5, 10, 5, 10],
-      miss:    15,
-      error:   [20, 10, 20],
-      scratch: [40, 10, 20],
+      potted: 40,
+      lucky:  [10, 5, 10, 5, 10],
+      miss:   15,
+      error:  [20, 10, 20],
     }
     haptic(hapticPatterns[type])
-    const isPotted = type === 'potted' || type === 'lucky' || type === 'scratch'
-    const isScratch = type === 'scratch'
-    const isError = type === 'error' || type === 'scratch'
+    const isPotted = type === 'potted' || type === 'lucky'
+    const isError = type === 'error'
     const newShotNumber = shots.length + 1
     const optimistic: Shot = {
       id: `temp-${Date.now()}`,
@@ -200,20 +202,21 @@ export default function GamePage() {
       potted: isPotted,
       balls_potted: isPotted ? 1 : 0,
       opponent_balls_potted: 0,
-      ball_color: (isPotted && !isScratch && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
+      ball_color: (isPotted && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
       is_lucky: type === 'lucky',
       is_error: isError,
       shot_number: newShotNumber,
       created_at: new Date().toISOString(),
     }
     setShots(prev => [...prev, optimistic])
+    setManualActivePlayer(null)
     const shotData: Parameters<typeof insertShot>[1] = {
       game_id: gameId,
       player_id: playerId,
       potted: isPotted,
       balls_potted: isPotted ? 1 : 0,
       opponent_balls_potted: 0,
-      ball_color: (isPotted && !isScratch && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
+      ball_color: (isPotted && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
       is_lucky: optimistic.is_lucky,
       is_error: optimistic.is_error,
       shot_number: newShotNumber,
@@ -250,6 +253,7 @@ export default function GamePage() {
       created_at: new Date().toISOString(),
     }
     setShots(prev => [...prev, optimistic])
+    setManualActivePlayer(null)
     await insertShot(db, {
       game_id: gameId,
       player_id: playerId,
@@ -261,6 +265,49 @@ export default function GamePage() {
       is_error: isFoul,
       shot_number: newShotNumber,
     })
+    setSaving(false)
+  }
+
+  const recordInoff = async (playerId: string, ownBalls: number) => {
+    if (!canEdit || saving) return
+    setInoffPopup(null)
+    setSaving(true)
+    setFlash({ playerId, type: 'error' })
+    setTimeout(() => setFlash(null), 350)
+    haptic([40, 10, 20])
+    const newShotNumber = shots.length + 1
+    const optimistic: Shot = {
+      id: `temp-${Date.now()}`,
+      game_id: gameId,
+      player_id: playerId,
+      potted: true,
+      balls_potted: ownBalls,
+      opponent_balls_potted: 0,
+      ball_color: colorAssignment ? (colorAssignment[playerId] ?? null) : null,
+      is_lucky: false,
+      is_error: true,
+      shot_number: newShotNumber,
+      created_at: new Date().toISOString(),
+    }
+    setShots(prev => [...prev, optimistic])
+    setManualActivePlayer(null)
+    const shotData: Parameters<typeof insertShot>[1] = {
+      game_id: gameId,
+      player_id: playerId,
+      potted: true,
+      balls_potted: ownBalls,
+      opponent_balls_potted: 0,
+      ball_color: colorAssignment ? (colorAssignment[playerId] ?? null) : null,
+      is_lucky: false,
+      is_error: true,
+      shot_number: newShotNumber,
+    }
+    try {
+      await insertShot(db, shotData)
+    } catch {
+      pendingQueue.current.push(shotData)
+      setPendingCount(pendingQueue.current.length)
+    }
     setSaving(false)
   }
 
@@ -288,6 +335,33 @@ export default function GamePage() {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null
+    }
+  }
+
+  const handleErrPressStart = (playerId: string) => {
+    if (!canEdit || saving) return
+    longPressErrTriggered.current = false
+    longPressErrTimer.current = setTimeout(() => {
+      longPressErrTriggered.current = true
+      haptic([10, 5, 20])
+      setInoffPopup({ playerId, ownBalls: 1 })
+    }, 400)
+  }
+
+  const handleErrPressEnd = (playerId: string) => {
+    if (longPressErrTimer.current) {
+      clearTimeout(longPressErrTimer.current)
+      longPressErrTimer.current = null
+    }
+    if (!longPressErrTriggered.current) {
+      recordShot(playerId, 'error')
+    }
+  }
+
+  const handleErrPressCancel = () => {
+    if (longPressErrTimer.current) {
+      clearTimeout(longPressErrTimer.current)
+      longPressErrTimer.current = null
     }
   }
 
@@ -461,13 +535,7 @@ export default function GamePage() {
       )
     : null
 
-  const shotButtons: { type: ShotType; label: string; icon: string; classes: string; small?: boolean }[] = [
-    { type: 'potted',  label: 'POT',    icon: '●',  classes: 'bg-pool-green-bright/20 border-pool-green-bright/50 text-pool-green-bright hover:bg-pool-green-bright/30 active:bg-pool-green-bright/40' },
-    { type: 'lucky',   label: 'LUCKY',  icon: '★',  classes: 'bg-pool-gold/15 border-pool-gold/50 text-pool-gold hover:bg-pool-gold/25 active:bg-pool-gold/35' },
-    { type: 'miss',    label: 'MISS',   icon: '✕',  classes: 'bg-pool-surface border-pool-border text-pool-chalk-dim hover:bg-pool-border active:bg-pool-border' },
-    { type: 'error',   label: 'ERR',    icon: '⚠',  classes: 'bg-pool-red/15 border-pool-red/40 text-pool-red hover:bg-pool-red/25 active:bg-pool-red/35' },
-    { type: 'scratch', label: 'IN-OFF', icon: '●○', classes: 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 active:bg-amber-500/30', small: true },
-  ]
+  const effectiveActivePlayerId = manualActivePlayer ?? (isP1Turn ? p1.id : p2.id)
 
   return (
     <div className="max-w-lg mx-auto flex flex-col min-h-dvh">
@@ -799,49 +867,80 @@ export default function GamePage() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-2">
+              {/* Active player selector */}
+              <div className="grid grid-cols-2 gap-2 mb-3">
                 {[{ player: p1, style: p1Style }, { player: p2, style: p2Style }].map(({ player, style }) => {
+                  const isActive = player.id === effectiveActivePlayerId
                   const isFlashing = flash?.playerId === player.id
-                  const isMyTurn = player.id === p1.id ? isP1Turn : !isP1Turn
                   return (
-                    <div key={player.id} className={`flex flex-col gap-1.5 transition-all duration-100 ${isFlashing ? 'scale-[0.97] brightness-125' : ''}`}>
-                      <div className="text-center py-0.5">
-                        <span className={`font-heading text-sm tracking-widest transition-all duration-200 ${isMyTurn ? '' : 'opacity-40'}`} style={{ color: style?.color }}>
-                          {player.display_name.toUpperCase()}
-                        </span>
-                        {isMyTurn && <span className="ml-1.5 text-[11px] leading-none" style={{ color: style?.color }}>▶</span>}
-                      </div>
-                      {shotButtons.map(btn =>
-                        btn.type === 'potted' ? (
-                          <button
-                            key={btn.type}
-                            onPointerDown={() => handlePotPressStart(player.id)}
-                            onPointerUp={() => handlePotPressEnd(player.id)}
-                            onPointerLeave={handlePotPressCancel}
-                            onPointerCancel={handlePotPressCancel}
-                            disabled={saving}
-                            className={`shot-btn w-full py-3 rounded-xl border font-heading text-base tracking-wider flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 select-none ${btn.classes}`}
-                          >
-                            <span>{btn.icon}</span>
-                            <span>{btn.label}</span>
-                          </button>
-                        ) : (
-                          <button
-                            key={btn.type}
-                            onClick={() => recordShot(player.id, btn.type)}
-                            disabled={saving}
-                            className={`shot-btn w-full ${btn.small ? 'py-1.5 text-xs' : 'py-3 text-base'} rounded-xl border font-heading tracking-wider flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 ${btn.classes}`}
-                          >
-                            <span>{btn.icon}</span>
-                            <span>{btn.label}</span>
-                          </button>
-                        )
-                      )}
-                    </div>
+                    <button
+                      key={player.id}
+                      onClick={() => setManualActivePlayer(player.id === effectiveActivePlayerId && manualActivePlayer !== null ? null : player.id)}
+                      className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 font-heading text-sm tracking-wider transition-all active:scale-95 ${isFlashing ? 'brightness-125' : ''} ${
+                        isActive ? 'bg-current/10' : 'border-pool-border bg-pool-surface text-pool-chalk-dim/40'
+                      }`}
+                      style={isActive ? { color: style?.color, borderColor: style?.color, background: (style?.color ?? '#fff') + '18' } : undefined}
+                    >
+                      {style && <PlayerBall number={style.number} color={isActive ? style.color : '#3a3a3a'} size={18} />}
+                      <span>{player.display_name.toUpperCase()}</span>
+                      {isActive && <span className="text-[10px]">▶</span>}
+                    </button>
                   )
                 })}
               </div>
-              <div className="flex gap-3 pt-2 pb-2">
+
+              {/* 2×2 shot grid: POT | MISS / LUCKY | ERR */}
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                {/* POT — top left */}
+                <button
+                  onPointerDown={() => handlePotPressStart(effectiveActivePlayerId)}
+                  onPointerUp={() => handlePotPressEnd(effectiveActivePlayerId)}
+                  onPointerLeave={handlePotPressCancel}
+                  onPointerCancel={handlePotPressCancel}
+                  disabled={saving}
+                  className="shot-btn py-5 rounded-xl border font-heading text-xl tracking-wider flex flex-col items-center justify-center gap-0.5 transition-all disabled:opacity-50 select-none bg-pool-green-bright/20 border-pool-green-bright/50 text-pool-green-bright hover:bg-pool-green-bright/30 active:bg-pool-green-bright/40"
+                >
+                  <span className="text-2xl leading-none">●</span>
+                  <span>POT</span>
+                  <span className="text-[9px] text-pool-chalk-dim/50 font-body normal-case tracking-normal leading-none mt-0.5">hold: multi</span>
+                </button>
+
+                {/* MISS — top right */}
+                <button
+                  onClick={() => recordShot(effectiveActivePlayerId, 'miss')}
+                  disabled={saving}
+                  className="shot-btn py-5 rounded-xl border font-heading text-xl tracking-wider flex flex-col items-center justify-center gap-0.5 transition-all disabled:opacity-50 bg-pool-surface border-pool-border text-pool-chalk-dim hover:bg-pool-border active:bg-pool-border"
+                >
+                  <span className="text-2xl leading-none">✕</span>
+                  <span>MISS</span>
+                </button>
+
+                {/* LUCKY — bottom left */}
+                <button
+                  onClick={() => recordShot(effectiveActivePlayerId, 'lucky')}
+                  disabled={saving}
+                  className="shot-btn py-5 rounded-xl border font-heading text-xl tracking-wider flex flex-col items-center justify-center gap-0.5 transition-all disabled:opacity-50 bg-pool-gold/15 border-pool-gold/50 text-pool-gold hover:bg-pool-gold/25 active:bg-pool-gold/35"
+                >
+                  <span className="text-2xl leading-none">★</span>
+                  <span>LUCKY</span>
+                </button>
+
+                {/* ERR — bottom right, hold for in-off */}
+                <button
+                  onPointerDown={() => handleErrPressStart(effectiveActivePlayerId)}
+                  onPointerUp={() => handleErrPressEnd(effectiveActivePlayerId)}
+                  onPointerLeave={handleErrPressCancel}
+                  onPointerCancel={handleErrPressCancel}
+                  disabled={saving}
+                  className="shot-btn py-5 rounded-xl border font-heading text-xl tracking-wider flex flex-col items-center justify-center gap-0.5 transition-all disabled:opacity-50 select-none bg-pool-red/15 border-pool-red/40 text-pool-red hover:bg-pool-red/25 active:bg-pool-red/35"
+                >
+                  <span className="text-2xl leading-none">⚠</span>
+                  <span>ERR</span>
+                  <span className="text-[9px] text-pool-chalk-dim/50 font-body normal-case tracking-normal leading-none mt-0.5">hold: in-off</span>
+                </button>
+              </div>
+
+              <div className="flex gap-3 pt-1 pb-2">
                 <button
                   onClick={undoLastShot}
                   disabled={saving || shots.length === 0}
@@ -927,6 +1026,56 @@ export default function GamePage() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* In-off popup */}
+      {inoffPopup && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in"
+          onClick={() => setInoffPopup(null)}
+        >
+          <div
+            className="w-full max-w-lg bg-pool-surface rounded-t-3xl border-t border-pool-border p-6 animate-slide-up"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="font-heading text-2xl tracking-wider text-pool-chalk text-center mb-1">IN-OFF</h2>
+            <p className="font-body text-xs text-pool-chalk-dim text-center mb-6">
+              Own ball(s) potted + cue ball — foul, turn switches
+            </p>
+
+            <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-2">Own balls potted</p>
+            <div className="flex gap-3 mb-6">
+              {[0, 1, 2, 3].map(n => (
+                <button
+                  key={n}
+                  onClick={() => setInoffPopup(p => p ? { ...p, ownBalls: n } : p)}
+                  className={`flex-1 py-4 rounded-xl border-2 font-heading text-2xl transition-all active:scale-95 ${
+                    inoffPopup.ownBalls === n
+                      ? 'border-amber-500 bg-amber-500/20 text-amber-400'
+                      : 'border-pool-border text-pool-chalk-dim hover:border-amber-500/40'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setInoffPopup(null)}
+                className="flex-1 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-wider text-pool-chalk-dim hover:text-pool-chalk transition-all"
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={() => recordInoff(inoffPopup.playerId, inoffPopup.ownBalls)}
+                className="flex-1 py-4 rounded-xl bg-amber-500 text-pool-bg font-heading text-lg tracking-widest hover:brightness-110 transition-all active:scale-[0.98]"
+              >
+                CONFIRM
+              </button>
+            </div>
           </div>
         </div>
       )}
