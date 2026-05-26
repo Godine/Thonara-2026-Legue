@@ -5,12 +5,13 @@ import { createClient } from '@/lib/supabase/server'
 import { fetchStandings, fetchLiveGame, fetchCompletedGames, fetchAllShots } from '@/lib/queries'
 import { generateNarrative } from '@/lib/narrative'
 import {
-  ACHIEVEMENTS, RARITY_STYLES,
+  ACHIEVEMENTS,
   computeAllAchievements, computeAllProgress,
 } from '@/lib/achievements'
 import Link from 'next/link'
 import PlayerAvatar from '@/components/PlayerAvatar'
 import PullToRefresh from '@/components/PullToRefresh'
+import FlipBadgeCard from '@/components/FlipBadgeCard'
 import { PLAYERS, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 
 const RANK_BADGES = ['🥇', '🥈', '🥉']
@@ -211,31 +212,19 @@ async function NearBadgesStream() {
                 <span className="text-base">🏅</span>
                 <p className="font-body text-[9px] text-pool-chalk-dim text-center leading-snug">All earned!</p>
               </div>
-            ) : candidates.map(({ achievement, pct, current, target, label }) => {
-              const rs = RARITY_STYLES[achievement.rarity]
-              const barPct = Math.min(100, Math.round(pct))
-              return (
-                <div
-                  key={achievement.id}
-                  className="rounded-xl border p-2.5 flex flex-col gap-1.5"
-                  style={{ borderColor: rs.border, background: rs.bg }}
-                >
-                  <div className="text-lg leading-none">{achievement.icon}</div>
-                  <p className="font-heading text-[10px] tracking-wide text-pool-chalk leading-snug">
-                    {achievement.name}
-                  </p>
-                  <div className="h-1 bg-pool-border rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${barPct}%`, backgroundColor: rs.color }}
-                    />
-                  </div>
-                  <p className="font-body text-[9px] text-pool-chalk-dim tabular-nums">
-                    {label ?? `${current}/${target}`}
-                  </p>
-                </div>
-              )
-            })}
+            ) : candidates.map(({ achievement, pct, current, target, label }) => (
+              <FlipBadgeCard
+                key={achievement.id}
+                icon={achievement.icon}
+                name={achievement.name}
+                description={achievement.description}
+                rarity={achievement.rarity}
+                barPct={Math.min(100, Math.round(pct))}
+                label={label}
+                current={current}
+                target={target}
+              />
+            ))}
           </div>
         ))}
       </div>
