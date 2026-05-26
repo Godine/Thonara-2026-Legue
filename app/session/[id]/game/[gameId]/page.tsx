@@ -564,26 +564,51 @@ export default function GamePage() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-2 px-4 mb-3">
         {([
-          { player: p1, stats: p1Stats, style: p1Style, oddsVal: odds.p1, isMyTurn: isP1Turn },
-          { player: p2, stats: p2Stats, style: p2Style, oddsVal: odds.p2, isMyTurn: !isP1Turn },
-        ] as const).map(({ player, stats, style, oddsVal, isMyTurn }) => {
+          { player: p1, stats: p1Stats, style: p1Style, oddsVal: odds.p1 },
+          { player: p2, stats: p2Stats, style: p2Style, oddsVal: odds.p2 },
+        ] as const).map(({ player, stats, style, oddsVal }) => {
           const isWinner = game.winner_id === player.id
+          const isActiveTurn = !game.is_complete && shots.length > 0 && player.id === effectiveActivePlayerId
+          const isFlashing = flash?.playerId === player.id
+          const canToggle = canEdit && !game.is_complete && shots.length > 0
           const acc = stats.shots > 0 ? Math.round((stats.ownPotted / stats.shots) * 100) : 0
           const showOdds = !game.is_complete && (p1Stats.shots + p2Stats.shots > 0 || Object.keys(histStats).length > 0)
           return (
             <div
               key={player.id}
-              className={`rounded-2xl p-3 border transition-all ${isWinner ? 'bg-pool-gold/10 border-pool-gold/50' : 'bg-pool-surface'}`}
-              style={{ borderColor: isWinner ? undefined : (!game.is_complete && isMyTurn ? (style?.color + '80') : undefined) }}
+              onClick={() => {
+                if (!canToggle) return
+                setManualActivePlayer(player.id === effectiveActivePlayerId && manualActivePlayer !== null ? null : player.id)
+              }}
+              className={`rounded-2xl p-3 border-2 transition-all duration-200 ${isFlashing ? 'brightness-125' : ''} ${
+                isWinner
+                  ? 'bg-pool-gold/10'
+                  : isActiveTurn
+                  ? ''
+                  : !game.is_complete && shots.length > 0
+                  ? 'bg-pool-surface opacity-50'
+                  : 'bg-pool-surface'
+              } ${canToggle ? 'cursor-pointer active:scale-[0.98]' : ''}`}
+              style={
+                isWinner
+                  ? { borderColor: '#c9a22780' }
+                  : isActiveTurn
+                  ? {
+                      borderColor: style?.color,
+                      background: (style?.color ?? '#fff') + '18',
+                      boxShadow: `0 0 0 1px ${style?.color}60, 0 0 22px ${style?.color}50`,
+                    }
+                  : { borderColor: '#1f3525' }
+              }
             >
               {/* Name + potted */}
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  {style && <PlayerBall number={style.number} color={style.color} size={22} />}
+                  {style && <PlayerBall number={style.number} color={isActiveTurn ? style.color : (style?.color + '60')} size={22} />}
                   <div className="min-w-0">
-                    <p className="font-heading text-sm tracking-wide leading-none truncate" style={{ color: style?.color }}>
+                    <p className="font-heading text-sm tracking-wide leading-none truncate" style={{ color: isActiveTurn ? style?.color : (style?.color + '70') }}>
                       {player.display_name.toUpperCase()}
-                      {!game.is_complete && isMyTurn && <span className="ml-1 text-[10px]">▶</span>}
+                      {isActiveTurn && <span className="ml-1 text-[10px]">▶</span>}
                       {isWinner && <span className="ml-1">🏆</span>}
                     </p>
                     <p className="font-body text-[10px] text-pool-chalk-dim mt-0.5 leading-none">
@@ -604,7 +629,7 @@ export default function GamePage() {
                 <span className="font-body text-[10px] text-pool-chalk-dim">{stats.shots > 0 ? `${acc}% acc` : '—'}</span>
                 {showOdds && (
                   <div className="flex items-center gap-1">
-                    <button onClick={() => setShowOddsInfo(true)} className="font-body text-[10px] text-pool-chalk-dim/40 hover:text-pool-chalk-dim transition-colors leading-none">ⓘ</button>
+                    <button onClick={e => { e.stopPropagation(); setShowOddsInfo(true) }} className="font-body text-[10px] text-pool-chalk-dim/40 hover:text-pool-chalk-dim transition-colors leading-none">ⓘ</button>
                     <span className="font-heading text-xs leading-none" style={{ color: style?.color }}>{oddsVal}% win</span>
                   </div>
                 )}
@@ -866,28 +891,6 @@ export default function GamePage() {
                   ))}
                 </div>
               )}
-
-              {/* Active player selector */}
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                {[{ player: p1, style: p1Style }, { player: p2, style: p2Style }].map(({ player, style }) => {
-                  const isActive = player.id === effectiveActivePlayerId
-                  const isFlashing = flash?.playerId === player.id
-                  return (
-                    <button
-                      key={player.id}
-                      onClick={() => setManualActivePlayer(player.id === effectiveActivePlayerId && manualActivePlayer !== null ? null : player.id)}
-                      className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 font-heading text-sm tracking-wider transition-all active:scale-95 ${isFlashing ? 'brightness-125' : ''} ${
-                        isActive ? 'bg-current/10' : 'border-pool-border bg-pool-surface text-pool-chalk-dim/40'
-                      }`}
-                      style={isActive ? { color: style?.color, borderColor: style?.color, background: (style?.color ?? '#fff') + '18' } : undefined}
-                    >
-                      {style && <PlayerBall number={style.number} color={isActive ? style.color : '#3a3a3a'} size={18} />}
-                      <span>{player.display_name.toUpperCase()}</span>
-                      {isActive && <span className="text-[10px]">▶</span>}
-                    </button>
-                  )
-                })}
-              </div>
 
               {/* 2×2 shot grid: POT | MISS / LUCKY | ERR */}
               <div className="grid grid-cols-2 gap-2 mb-2">
