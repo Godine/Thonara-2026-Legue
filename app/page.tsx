@@ -324,6 +324,47 @@ export default function Dashboard() {
           </svg>
           <div className="flex-1 h-px bg-gradient-to-l from-transparent to-pool-gold/30" />
         </div>
+
+        {/* ── RACK EM UP ── */}
+        <div className="relative px-0 pb-2">
+          <Link
+            href="/session/new"
+            className="relative block overflow-hidden rounded-3xl transition-all duration-150 active:scale-[0.97]"
+            style={{ boxShadow: '0 0 48px #c9a22728, 0 0 120px #c9a22710' }}
+          >
+            {/* Felt backing */}
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(155deg, #1f5c38 0%, #0e2a1a 55%, #0d1f10 100%)' }} />
+            {/* Subtle dot weave */}
+            <div className="absolute inset-0 opacity-[0.05]" style={{ backgroundImage: 'radial-gradient(circle, #f0ede6 1px, transparent 1px)', backgroundSize: '18px 18px' }} />
+            {/* Gold diagonal shimmer */}
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(110deg, transparent 25%, #c9a2270a 50%, transparent 75%)' }} />
+            {/* Inner border glow */}
+            <div className="absolute inset-0 rounded-3xl" style={{ boxShadow: 'inset 0 0 0 1.5px #c9a22745' }} />
+
+            <div className="relative flex items-center justify-between px-7 py-6">
+              <div className="text-left">
+                <p className="font-body text-[10px] tracking-[0.4em] uppercase mb-2 leading-none" style={{ color: '#c9a22780' }}>
+                  New Session
+                </p>
+                <p
+                  className="font-heading text-[2.6rem] leading-none tracking-wider"
+                  style={{ color: '#e8c547', textShadow: '0 0 28px #c9a22780, 0 2px 0 #7a6000' }}
+                >
+                  RACK&nbsp;'EM UP
+                </p>
+                <p className="font-body text-[11px] mt-2 leading-none" style={{ color: '#f0ede640' }}>
+                  3 players · 6 games · let&apos;s go
+                </p>
+              </div>
+              <div
+                className="shrink-0 text-[3.2rem] leading-none ml-4"
+                style={{ filter: 'drop-shadow(0 0 14px #c9a22790) drop-shadow(0 0 3px #000)' }}
+              >
+                🎱
+              </div>
+            </div>
+          </Link>
+        </div>
       </div>
 
       {/* ── LIVE GAME BANNER (streams in) ────────────────────────────── */}
@@ -336,15 +377,8 @@ export default function Dashboard() {
         <StandingsStream />
       </Suspense>
 
-      {/* ── CTA ──────────────────────────────────────────────────────── */}
-      <section className="px-4 pb-5 space-y-2.5">
-        <Link
-          href="/session/new"
-          className="flex items-center justify-between w-full bg-pool-gold hover:bg-pool-gold-light text-pool-bg font-heading px-6 py-5 rounded-2xl transition-all active:scale-[0.98] glow-gold"
-        >
-          <span className="text-2xl tracking-widest">RACK EM UP</span>
-          <span className="text-2xl">🎱</span>
-        </Link>
+      {/* ── NAV GRID ─────────────────────────────────────────────────── */}
+      <section className="px-4 pb-5">
         <div className="grid grid-cols-4 gap-2">
           {[
             { href: '/stats',        icon: '📊', label: 'STATS'   },
