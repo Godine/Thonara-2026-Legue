@@ -204,219 +204,253 @@ export default function SessionPage() {
   const sortedStandings = [...standings].sort((a, b) => b.wins - a.wins)
   if (showPreview && completedGames.length === 0) {
     return (
-      <div className="max-w-lg mx-auto px-4 py-6 animate-fade-in flex flex-col min-h-[80vh]">
-        <div className="flex items-center justify-between mb-6">
-          <Link href="/" className="text-pool-chalk-dim text-sm font-body hover:text-pool-gold transition-colors">← Home</Link>
-          <button onClick={() => setShowPreview(false)}
-            className="text-pool-chalk-dim text-xs font-body hover:text-pool-chalk transition-colors">
-            skip →
-          </button>
-        </div>
+      <div className="max-w-lg mx-auto animate-fade-in flex flex-col min-h-dvh">
 
-        <div className="text-center mb-8">
-          <p className="font-body text-xs tracking-[0.3em] uppercase text-pool-chalk-dim mb-1">
-            {format(new Date(session.date + 'T12:00:00'), 'EEEE, MMMM d')}
-          </p>
-          <h1 className="font-heading text-7xl tracking-widest leading-none text-pool-chalk">TONIGHT</h1>
-          <div className="mt-3 h-px bg-gradient-to-r from-transparent via-pool-gold/50 to-transparent" />
-        </div>
+        {/* ── Hero ── */}
+        <div className="relative px-4 pt-8 pb-6 text-center overflow-hidden">
+          <div className="absolute inset-0 pointer-events-none"
+            style={{ background: 'radial-gradient(ellipse 90% 70% at 50% 0%, #1a4731 0%, transparent 70%)' }} />
+          <div className="absolute inset-0 pointer-events-none opacity-[0.05]"
+            style={{ backgroundImage: 'radial-gradient(circle, #c9a227 1.5px, transparent 1.5px)', backgroundSize: '32px 32px' }} />
 
-        {sortedStandings.length > 0 && (
-          <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden mb-4">
-            <div className="px-4 py-3 border-b border-pool-border">
-              <p className="font-heading text-xs tracking-widest text-pool-chalk-dim">THE TABLE</p>
-            </div>
-            <div className="divide-y divide-pool-border">
-              {sortedStandings.map((s, i) => {
-                const style = PLAYER_STYLES[s.username as PlayerUsername]
-                const badges = ['🥇', '🥈', '🥉']
-                return (
-                  <div key={s.username} className="flex items-center gap-3 px-4 py-3">
-                    <span className="text-lg w-7 text-center">{badges[i] ?? String(i + 1)}</span>
-                    {style && <PlayerBall number={style.number} color={style.color} size={34} />}
-                    <p className="font-heading text-xl tracking-wide flex-1" style={{ color: style?.color }}>
-                      {s.display_name.toUpperCase()}
-                    </p>
-                    <div className="text-right">
-                      <p className="font-heading text-3xl text-pool-gold leading-none">{s.wins}</p>
-                      <p className="font-body text-xs text-pool-chalk-dim">{s.losses}L</p>
-                    </div>
-                  </div>
-                )
-              })}
+          <div className="relative flex items-center justify-between mb-4">
+            <Link href="/" className="text-pool-chalk-dim text-sm font-body hover:text-pool-gold transition-colors">← Home</Link>
+            <button onClick={() => setShowPreview(false)}
+              className="text-pool-chalk-dim text-xs font-body hover:text-pool-chalk transition-colors">
+              skip →
+            </button>
+          </div>
+
+          <div className="relative">
+            <p className="font-body text-xs tracking-[0.4em] uppercase text-pool-gold/60 mb-1">
+              {format(new Date(session.date + 'T12:00:00'), 'EEEE, MMMM d')}
+            </p>
+            <h1
+              className="font-heading text-[5.5rem] leading-none tracking-widest text-pool-chalk"
+              style={{ textShadow: '0 0 60px #1a4731, 0 0 20px #1a4731' }}
+            >
+              TONIGHT
+            </h1>
+            <div className="mt-4 flex items-center gap-3">
+              <div className="flex-1 h-px bg-gradient-to-r from-transparent to-pool-gold/40" />
+              <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
+                <circle cx="9" cy="9" r="9" fill="#111" />
+                <circle cx="9" cy="9" r="4.5" fill="white" />
+                <text x="9" y="12.5" textAnchor="middle" fontSize="6" fontWeight="bold" fill="#111">8</text>
+              </svg>
+              <div className="flex-1 h-px bg-gradient-to-l from-transparent to-pool-gold/40" />
             </div>
           </div>
-        )}
-
-        <div className="bg-pool-gold/10 border border-pool-gold/30 rounded-2xl px-5 py-4 mb-4 text-center">
-          <p className="font-heading text-lg tracking-wide text-pool-chalk leading-snug">
-            {generateNarrative(standings)}
-          </p>
         </div>
 
-        {(() => {
-          const predPlayers = sortedStandings.map(s => ({
-            username: s.username as PlayerUsername,
-            displayName: s.display_name,
-          }))
-          const pred = getSessionPrediction(session.id, predPlayers)
-          if (!pred) return null
-          const predStyle = PLAYER_STYLES[pred.username]
-          return (
-            <div className="rounded-2xl border overflow-hidden mb-4"
-              style={{ borderColor: `${predStyle?.color}33`, background: `${predStyle?.color}08` }}>
-              <div className="px-4 py-2.5 border-b flex items-center gap-2"
-                style={{ borderColor: `${predStyle?.color}22` }}>
-                <span className="text-base">🔮</span>
-                <p className="font-heading text-xs tracking-widest text-pool-chalk-dim">TONIGHT'S PREDICTION</p>
-              </div>
-              <div className="px-4 py-4">
-                <div className="flex items-center gap-3 mb-3">
-                  {predStyle && <PlayerBall number={predStyle.number} color={predStyle.color} size={42} />}
-                  <div>
-                    <p className="font-heading text-2xl tracking-widest leading-none" style={{ color: predStyle?.color }}>
-                      {pred.displayName.toUpperCase()}
-                    </p>
-                    <p className="font-body text-[10px] tracking-[0.2em] text-pool-chalk-dim mt-0.5">
-                      PREDICTED WINNER
-                    </p>
+        <div className="px-4 flex flex-col gap-4 pb-8">
+
+          {/* ── Prediction ── */}
+          {(() => {
+            const predPlayers = sortedStandings.map(s => ({
+              username: s.username as PlayerUsername,
+              displayName: s.display_name,
+            }))
+            const pred = getSessionPrediction(session.id, predPlayers)
+            if (!pred) return null
+            const predStyle = PLAYER_STYLES[pred.username]
+            return (
+              <div
+                className="relative overflow-hidden rounded-2xl border"
+                style={{ borderColor: `${predStyle?.color}40`, background: `linear-gradient(135deg, ${predStyle?.color}14 0%, ${predStyle?.color}06 100%)` }}
+              >
+                <div className="absolute inset-0 pointer-events-none opacity-[0.04]"
+                  style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+                <div className="relative px-4 pt-4 pb-3">
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <span className="text-sm">🔮</span>
+                    <p className="font-heading text-[10px] tracking-[0.25em] text-pool-chalk-dim">TONIGHT&apos;S PREDICTION</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div
+                      style={{ filter: `drop-shadow(0 0 12px ${predStyle?.color}80)` }}
+                    >
+                      {predStyle && <PlayerBall number={predStyle.number} color={predStyle.color} size={52} />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="font-heading text-2xl tracking-widest leading-none"
+                        style={{ color: predStyle?.color, textShadow: `0 0 20px ${predStyle?.color}60` }}
+                      >
+                        {pred.displayName.toUpperCase()}
+                      </p>
+                      <p className="font-body text-[10px] tracking-[0.2em] text-pool-chalk-dim mt-1">PREDICTED WINNER</p>
+                      <p className="font-body text-xs text-pool-chalk-dim/70 italic mt-2 leading-snug">&ldquo;{pred.reason}&rdquo;</p>
+                    </div>
                   </div>
                 </div>
-                <p className="font-body text-sm text-pool-chalk-dim italic leading-relaxed">
-                  &ldquo;{pred.reason}&rdquo;
-                </p>
-                <p className="font-body text-[9px] text-pool-chalk-dim/35 mt-2 text-right tracking-wide">
-                  totally unscientific
-                </p>
               </div>
-            </div>
-          )
-        })()}
+            )
+          })()}
 
-        {previewStats && (
-          <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden mb-4">
-            <div className="px-4 py-3 border-b border-pool-border">
-              <p className="font-heading text-xs tracking-widest text-pool-chalk-dim">GOING IN…</p>
-            </div>
-
-            <div className="divide-y divide-pool-border">
-              {sortedStandings.map(s => {
-                const style = PLAYER_STYLES[s.username as PlayerUsername]
-                const form = previewStats.form[s.username] ?? []
-                const streak = previewStats.streaks[s.username] ?? 0
-                return (
-                  <div key={s.username} className="flex items-center gap-3 px-4 py-3">
-                    {style && <PlayerBall number={style.number} color={style.color} size={26} />}
-                    <span className="font-heading text-sm tracking-wide w-16" style={{ color: style?.color }}>
-                      {s.display_name.toUpperCase()}
-                    </span>
-                    <div className="flex gap-1 flex-1">
-                      {form.map((win, j) => (
-                        <span key={j} className="text-xs" style={{ color: win ? (style?.color ?? '#22c55e') : '#2e3a2b' }}>●</span>
-                      ))}
-                      {form.length === 0 && <span className="text-xs text-pool-chalk-dim">no games yet</span>}
-                    </div>
-                    {streak >= 2 && <span className="font-body text-xs text-pool-gold shrink-0">🔥 {streak} streak</span>}
-                    {streak === 1 && <span className="font-body text-xs text-pool-chalk-dim shrink-0">W last</span>}
-                    {streak === 0 && form.length > 0 && <span className="font-body text-xs text-pool-chalk-dim shrink-0">L last</span>}
-                  </div>
-                )
-              })}
-            </div>
-
-            {previewStats.h2h.some(p => p.w1 + p.w2 > 0) && (
-              <div className="px-4 py-3 border-t border-pool-border space-y-2.5">
-                <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-2">HEAD TO HEAD</p>
-                {previewStats.h2h.map(pair => {
-                  const total = pair.w1 + pair.w2
-                  if (total === 0) return null
-                  const s1 = PLAYER_STYLES[pair.u1 as PlayerUsername]
-                  const s2 = PLAYER_STYLES[pair.u2 as PlayerUsername]
-                  const pct1 = Math.round((pair.w1 / total) * 100)
+          {/* ── Standing + form ── */}
+          {sortedStandings.length > 0 && (
+            <div className="rounded-2xl border border-pool-border bg-pool-surface overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-pool-border">
+                <p className="font-heading text-[10px] tracking-[0.25em] text-pool-chalk-dim">GOING IN</p>
+              </div>
+              <div className="divide-y divide-pool-border/60">
+                {sortedStandings.map((s, i) => {
+                  const style  = PLAYER_STYLES[s.username as PlayerUsername]
+                  const form   = previewStats?.form[s.username] ?? []
+                  const streak = previewStats?.streaks[s.username] ?? 0
+                  const badges = ['🥇', '🥈', '🥉']
                   return (
-                    <div key={`${pair.u1}-${pair.u2}`}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-heading text-xs tracking-wide" style={{ color: s1?.color }}>{pair.n1}</span>
-                        <span className="font-heading text-sm text-pool-chalk tabular-nums">{pair.w1}–{pair.w2}</span>
-                        <span className="font-heading text-xs tracking-wide" style={{ color: s2?.color }}>{pair.n2}</span>
+                    <div key={s.username} className="flex items-center gap-3 px-4 py-3">
+                      <span className="text-base w-6 text-center select-none shrink-0">{badges[i] ?? String(i + 1)}</span>
+                      {style && (
+                        <div style={{ filter: `drop-shadow(0 0 6px ${style.color}50)` }}>
+                          <PlayerBall number={style.number} color={style.color} size={32} />
+                        </div>
+                      )}
+                      <p className="font-heading text-base tracking-wide w-16 shrink-0" style={{ color: style?.color }}>
+                        {s.display_name.toUpperCase()}
+                      </p>
+                      <div className="flex gap-1 flex-1 justify-center">
+                        {form.map((win, j) => (
+                          <span
+                            key={j}
+                            className="text-[11px] leading-none"
+                            style={{ color: win ? (style?.color ?? '#22c55e') : '#2e3a2b' }}
+                          >●</span>
+                        ))}
+                        {form.length === 0 && <span className="text-[10px] text-pool-chalk-dim/40">no games yet</span>}
                       </div>
-                      <div className="h-1.5 rounded-full overflow-hidden bg-pool-border flex">
-                        <div className="h-full transition-all" style={{ width: `${pct1}%`, backgroundColor: s1?.color }} />
-                        <div className="h-full flex-1" style={{ backgroundColor: s2?.color }} />
+                      <div className="text-right shrink-0">
+                        <span className="font-heading text-2xl leading-none" style={{ color: style?.color }}>{s.wins}</span>
+                        <span className="font-body text-[10px] text-pool-chalk-dim ml-1">W</span>
+                        {streak >= 2 && <p className="font-body text-[10px] text-pool-gold leading-none mt-0.5">🔥 {streak}</p>}
                       </div>
                     </div>
                   )
                 })}
               </div>
-            )}
 
-            {previewStats.lastSession && previewStats.lastSession.wins.length > 0 && (
-              <div className="px-4 py-3 border-t border-pool-border flex items-center gap-3">
-                <span className="text-lg">📅</span>
-                <div className="flex-1">
-                  <p className="font-body text-xs text-pool-chalk-dim">
-                    Last session · {format(new Date(previewStats.lastSession.date + 'T12:00:00'), 'MMM d')}
-                  </p>
-                  <p className="font-body text-sm text-pool-chalk mt-0.5">
-                    {previewStats.lastSession.wins.map((w, i) => (
-                      <span key={w.name}>
-                        {i > 0 && <span className="text-pool-chalk-dim"> · </span>}
-                        <span style={{ color: PLAYER_STYLES[standings.find(s => s.display_name === w.name)?.username as PlayerUsername]?.color }}>
-                          {w.name}
+              {/* H2H */}
+              {previewStats?.h2h.some(p => p.w1 + p.w2 > 0) && (
+                <div className="px-4 py-3 border-t border-pool-border/60 space-y-2">
+                  <p className="font-heading text-[9px] tracking-[0.2em] text-pool-chalk-dim/60 mb-2">HEAD TO HEAD</p>
+                  {previewStats.h2h.map(pair => {
+                    const total = pair.w1 + pair.w2
+                    if (total === 0) return null
+                    const s1 = PLAYER_STYLES[pair.u1 as PlayerUsername]
+                    const s2 = PLAYER_STYLES[pair.u2 as PlayerUsername]
+                    const pct1 = Math.round((pair.w1 / total) * 100)
+                    return (
+                      <div key={`${pair.u1}-${pair.u2}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-heading text-xs tracking-wide" style={{ color: s1?.color }}>{pair.n1}</span>
+                          <span className="font-body text-xs text-pool-chalk tabular-nums">{pair.w1}–{pair.w2}</span>
+                          <span className="font-heading text-xs tracking-wide" style={{ color: s2?.color }}>{pair.n2}</span>
+                        </div>
+                        <div className="h-1.5 rounded-full overflow-hidden bg-pool-border flex">
+                          <div className="h-full transition-all" style={{ width: `${pct1}%`, backgroundColor: s1?.color }} />
+                          <div className="h-full flex-1" style={{ backgroundColor: s2?.color }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Last session */}
+              {previewStats?.lastSession && previewStats.lastSession.wins.length > 0 && (
+                <div className="px-4 py-2.5 border-t border-pool-border/60 flex items-center gap-3">
+                  <span className="text-sm shrink-0">📅</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-body text-[10px] text-pool-chalk-dim/60">
+                      Last session · {format(new Date(previewStats.lastSession.date + 'T12:00:00'), 'MMM d')}
+                    </p>
+                    <p className="font-body text-xs text-pool-chalk mt-0.5">
+                      {previewStats.lastSession.wins.map((w, i) => (
+                        <span key={w.name}>
+                          {i > 0 && <span className="text-pool-chalk-dim"> · </span>}
+                          <span style={{ color: PLAYER_STYLES[standings.find(s => s.display_name === w.name)?.username as PlayerUsername]?.color }}>
+                            {w.name}
+                          </span>
+                          {' '}<span className="text-pool-chalk-dim">{w.count}W</span>
                         </span>
-                        {' '}<span className="text-pool-chalk-dim">{w.count}W</span>
+                      ))}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Game lineup ── */}
+          <div className="rounded-2xl border border-pool-border bg-pool-surface overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-pool-border">
+              <p className="font-heading text-[10px] tracking-[0.25em] text-pool-chalk-dim">TONIGHT&apos;S 6 GAMES</p>
+            </div>
+            <div className="divide-y divide-pool-border/60">
+              {session.games.map(g => {
+                const p1s = PLAYER_STYLES[g.player1.username as PlayerUsername]
+                const p2s = PLAYER_STYLES[g.player2.username as PlayerUsername]
+                const sched = GAME_SCHEDULE.find(s => s.gameNumber === g.game_number)
+                return (
+                  <div key={g.id} className="flex items-center gap-2 px-4 py-2.5">
+                    <span className="font-heading text-xs text-pool-chalk-dim/50 w-4 shrink-0">{g.game_number}</span>
+                    <div className="flex items-center gap-1.5 flex-1">
+                      {p1s && <PlayerBall number={p1s.number} color={p1s.color} size={18} />}
+                      <span className="font-heading text-sm tracking-wide" style={{ color: p1s?.color }}>
+                        {g.player1.display_name.toUpperCase()}
                       </span>
-                    ))}
-                  </p>
-                </div>
+                    </div>
+                    <span className="font-body text-[10px] text-pool-chalk-dim/40">vs</span>
+                    <div className="flex items-center gap-1.5 flex-1 justify-end">
+                      <span className="font-heading text-sm tracking-wide" style={{ color: p2s?.color }}>
+                        {g.player2.display_name.toUpperCase()}
+                      </span>
+                      {p2s && <PlayerBall number={p2s.number} color={p2s.color} size={18} />}
+                    </div>
+                    {sched && (
+                      <span className="font-body text-[9px] text-pool-chalk-dim/40 w-12 text-right shrink-0">
+                        {PLAYER_STYLES[sched.scorer as PlayerUsername]?.label} 📝
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* ── LET'S PLAY CTA ── */}
+          <button
+            onClick={() => setShowPreview(false)}
+            className="relative overflow-hidden rounded-3xl transition-all duration-150 active:scale-[0.97] mt-auto"
+            style={{ boxShadow: '0 0 48px #c9a22728, 0 0 120px #c9a22710' }}
+          >
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(155deg, #1f5c38 0%, #0e2a1a 55%, #0d1f10 100%)' }} />
+            <div className="absolute inset-0 opacity-[0.05]" style={{ backgroundImage: 'radial-gradient(circle, #f0ede6 1px, transparent 1px)', backgroundSize: '18px 18px' }} />
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(110deg, transparent 25%, #c9a2270a 50%, transparent 75%)' }} />
+            <div className="absolute inset-0 rounded-3xl" style={{ boxShadow: 'inset 0 0 0 1.5px #c9a22745' }} />
+            <div className="relative flex items-center justify-between px-7 py-6">
+              <div>
+                <p className="font-body text-[10px] tracking-[0.4em] uppercase mb-1.5 leading-none" style={{ color: '#c9a22780' }}>
+                  6 games · let&apos;s go
+                </p>
+                <p
+                  className="font-heading text-[2.4rem] leading-none tracking-wider"
+                  style={{ color: '#e8c547', textShadow: '0 0 28px #c9a22780, 0 2px 0 #7a6000' }}
+                >
+                  LET&apos;S PLAY
+                </p>
               </div>
-            )}
-          </div>
-        )}
-
-        <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden mb-6">
-          <div className="px-4 py-3 border-b border-pool-border">
-            <p className="font-heading text-xs tracking-widest text-pool-chalk-dim">TONIGHT'S GAMES</p>
-          </div>
-          <div className="divide-y divide-pool-border">
-            {session.games.map(g => {
-              const p1Style = PLAYER_STYLES[g.player1.username as PlayerUsername]
-              const p2Style = PLAYER_STYLES[g.player2.username as PlayerUsername]
-              const schedule = GAME_SCHEDULE.find(s => s.gameNumber === g.game_number)
-              const scorerStyle = schedule ? PLAYER_STYLES[schedule.scorer as PlayerUsername] : null
-              return (
-                <div key={g.id} className="flex items-center gap-2 px-4 py-2.5">
-                  <span className="font-body text-xs text-pool-chalk-dim w-5">{g.game_number}</span>
-                  <div className="flex items-center gap-1.5 flex-1">
-                    {p1Style && <PlayerBall number={p1Style.number} color={p1Style.color} size={20} />}
-                    <span className="font-heading text-sm tracking-wide" style={{ color: p1Style?.color }}>
-                      {g.player1.display_name.toUpperCase()}
-                    </span>
-                  </div>
-                  <span className="font-body text-xs text-pool-chalk-dim">vs</span>
-                  <div className="flex items-center gap-1.5 flex-1 justify-end">
-                    <span className="font-heading text-sm tracking-wide" style={{ color: p2Style?.color }}>
-                      {g.player2.display_name.toUpperCase()}
-                    </span>
-                    {p2Style && <PlayerBall number={p2Style.number} color={p2Style.color} size={20} />}
-                  </div>
-                  {scorerStyle && (
-                    <span className="font-body text-xs text-pool-chalk-dim w-14 text-right shrink-0">
-                      {scorerStyle.label} scores
-                    </span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+              <div
+                className="shrink-0 text-[3rem] leading-none ml-4"
+                style={{ filter: 'drop-shadow(0 0 14px #c9a22790) drop-shadow(0 0 3px #000)' }}
+              >
+                🎱
+              </div>
+            </div>
+          </button>
         </div>
-
-        <button
-          onClick={() => setShowPreview(false)}
-          className="w-full bg-pool-gold hover:bg-pool-gold-light text-pool-bg font-heading text-2xl tracking-widest py-5 rounded-2xl transition-all active:scale-[0.98] glow-gold mt-auto"
-        >
-          ▶ LET'S PLAY
-        </button>
       </div>
     )
   }
