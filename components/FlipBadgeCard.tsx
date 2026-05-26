@@ -10,7 +10,7 @@ interface FlipBadgeCardProps {
   description: string
   rarity: Rarity
   barPct: number
-  label: string | null
+  label: string | null | undefined
   current: number
   target: number
 }
