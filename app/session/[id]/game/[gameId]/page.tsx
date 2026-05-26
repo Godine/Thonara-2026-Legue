@@ -51,8 +51,6 @@ export default function GamePage() {
   const [h2hStats, setH2hStats]         = useState<{ p1Wins: number; p2Wins: number }>({ p1Wins: 0, p2Wins: 0 })
   const [showCelebration, setShowCelebration] = useState(false)
   const [showOddsInfo, setShowOddsInfo]   = useState(false)
-  const [showTrashTalk, setShowTrashTalk] = useState(false)
-  const [trashTalkLine, setTrashTalkLine] = useState('')
   const [adminPanel, setAdminPanel]       = useState(false)
   const [adminWinnerId, setAdminWinnerId] = useState('')
   const [adminBlackBall, setAdminBlackBall] = useState(false)
@@ -537,6 +535,13 @@ export default function GamePage() {
 
   const effectiveActivePlayerId = manualActivePlayer ?? (isP1Turn ? p1.id : p2.id)
 
+  const trashTalkLine = game.winner ? (() => {
+    const wStats = game.winner_id === p1.id ? p1Stats : p2Stats
+    const lStats = game.winner_id === p1.id ? p2Stats : p1Stats
+    const loser  = game.winner_id === p1.id ? p2 : p1
+    return pickTrashTalk(game.winner, loser, wStats, lStats, shots, game.loser_potted_black)
+  })() : null
+
   return (
     <div className="max-w-lg mx-auto flex flex-col min-h-dvh">
 
@@ -705,20 +710,11 @@ export default function GamePage() {
             </div>
           )}
 
-          {game.winner && (
-            <button
-              onClick={() => {
-                const wStats = getPlayerStats(shots, game.winner_id!)
-                const lId = game.player1_id === game.winner_id ? game.player2_id : game.player1_id
-                const loser = game.player1_id === game.winner_id ? game.player2 : game.player1
-                const lStats = getPlayerStats(shots, lId)
-                setTrashTalkLine(pickTrashTalk(game.winner!, loser, wStats, lStats, shots, game.loser_potted_black))
-                setShowTrashTalk(true)
-              }}
-              className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl border border-pool-gold/40 bg-pool-gold/10 font-heading text-base tracking-widest text-pool-gold hover:bg-pool-gold/20 transition-all active:scale-[0.98]"
-            >
-              📢 TRASH TALK CARD
-            </button>
+          {trashTalkLine && (
+            <div className="rounded-2xl border border-pool-border bg-pool-surface px-4 py-4">
+              <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-2">📢 Verdict</p>
+              <p className="font-body text-sm text-pool-chalk leading-relaxed">{trashTalkLine}</p>
+            </div>
           )}
 
           {currentUsername === 'godine' && (
@@ -1362,52 +1358,6 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* Trash talk overlay */}
-      {showTrashTalk && game?.winner && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-pool-bg/90 backdrop-blur-sm animate-fade-in"
-          onClick={() => setShowTrashTalk(false)}
-        >
-          <div
-            className="w-full max-w-sm rounded-3xl border-2 p-6 flex flex-col items-center gap-5 text-center"
-            style={{
-              borderColor: PLAYER_STYLES[game.winner.username as PlayerUsername]?.color ?? '#c9a227',
-              background: 'linear-gradient(160deg, #0e1e12 0%, #060d08 100%)',
-              boxShadow: `0 0 40px ${PLAYER_STYLES[game.winner.username as PlayerUsername]?.color ?? '#c9a227'}55`,
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <p className="font-body text-xs tracking-[0.25em] uppercase text-pool-chalk-dim">Thonara League · Game Recap</p>
-            <div className="text-5xl">📢</div>
-            <p className="font-heading text-xl tracking-wide text-pool-chalk leading-snug">{trashTalkLine}</p>
-            <div className="w-full grid grid-cols-2 gap-3 pt-2 border-t border-pool-border">
-              {[game.player1, game.player2].map(pl => {
-                const st = getPlayerStats(shots, pl.id)
-                const acc = st.shots > 0 ? Math.round((st.ownPotted / st.shots) * 100) : 0
-                const plStyle = PLAYER_STYLES[pl.username as PlayerUsername]
-                const isWinner = pl.id === game.winner_id
-                return (
-                  <div key={pl.id} className="text-center">
-                    <p className="font-heading text-sm tracking-widest mb-1" style={{ color: plStyle?.color }}>
-                      {pl.display_name.toUpperCase()}{isWinner ? ' 👑' : ''}
-                    </p>
-                    <p className="font-heading text-3xl text-pool-chalk">{st.potted}</p>
-                    <p className="font-body text-xs text-pool-chalk-dim">pots · {acc}%</p>
-                    {st.errors > 0 && <p className="font-body text-xs text-pool-red mt-0.5">{st.errors} errors</p>}
-                    {st.lucky > 0 && <p className="font-body text-xs text-pool-gold mt-0.5">{st.lucky} flukes</p>}
-                  </div>
-                )
-              })}
-            </div>
-            <button
-              onClick={() => setShowTrashTalk(false)}
-              className="font-body text-xs text-pool-chalk-dim hover:text-pool-chalk transition-colors"
-            >
-              tap anywhere to close
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
