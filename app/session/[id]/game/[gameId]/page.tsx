@@ -35,6 +35,14 @@ interface PotPopupState {
   oppBalls: number
 }
 
+interface MilestoneToast {
+  id: string
+  playerColor: string
+  emoji: string
+  headline: string
+  message: string
+}
+
 export default function GamePage() {
   const { id: sessionId, gameId } = useParams<{ id: string; gameId: string }>()
   const router = useRouter()
@@ -66,6 +74,7 @@ export default function GamePage() {
   const [pendingCount, setPendingCount] = useState(0)
   const [manualActivePlayer, setManualActivePlayer] = useState<string | null>(null)
   const [inoffPopup, setInoffPopup]     = useState<{ playerId: string; ownBalls: number } | null>(null)
+  const [milestoneToasts, setMilestoneToasts] = useState<MilestoneToast[]>([])
   const prevCompleteRef   = useRef<boolean | undefined>(undefined)
   const timerStartRef     = useRef<number | null>(null)
   const longPressTimer    = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -146,6 +155,70 @@ export default function GamePage() {
     const otherId = pid === game.player1_id ? game.player2_id : game.player1_id
     setColorAssignment({ [pid]: color, [otherId]: color === 'yellow' ? 'red' : 'yellow' })
   }, [shots, game?.player1_id, game?.player2_id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Milestone & streak toast detection — only fires for freshly recorded (optimistic) shots
+  useEffect(() => {
+    if (shots.length === 0 || !game) return
+    const lastShot = shots[shots.length - 1]
+    if (!lastShot.id.startsWith('temp-')) return
+
+    const shooterId = lastShot.player_id
+    const shooter = shooterId === game.player1_id ? game.player1 : game.player2
+    const shooterStyle = PLAYER_STYLES[shooter.username as PlayerUsername]
+    const shotBalls = lastShot.balls_potted ?? (lastShot.potted ? 1 : 0)
+    const isPot = shotBalls > 0 && !lastShot.is_error
+
+    const newToasts: MilestoneToast[] = []
+
+    if (isPot) {
+      // Career pot milestones (25 / 50 / 100 / 200 / 500)
+      const careerBefore = histStats[shooterId]?.potted ?? 0
+      const gamePots = shots
+        .filter(s => s.player_id === shooterId)
+        .reduce((sum, s) => sum + (s.balls_potted ?? (s.potted ? 1 : 0)), 0)
+      const careerNow = careerBefore + gamePots
+      const careerPrev = careerNow - shotBalls
+      for (const threshold of [25, 50, 100, 200, 500]) {
+        if (careerPrev < threshold && careerNow >= threshold) {
+          newToasts.push({
+            id: `${Date.now()}-career-${threshold}`,
+            playerColor: shooterStyle?.color ?? '#c9a227',
+            emoji: threshold >= 200 ? '🤩' : '💯',
+            headline: shooter.display_name.toUpperCase(),
+            message: `${threshold} career pots!`,
+          })
+          break
+        }
+      }
+
+      // Hot streak milestones (fires exactly at 3 / 5 / 7 consecutive pots)
+      let streakNow = 0
+      for (let i = shots.length - 1; i >= 0; i--) {
+        const s = shots[i]
+        if (s.player_id !== shooterId) break
+        const b = s.balls_potted ?? (s.potted ? 1 : 0)
+        if (b === 0 || s.is_error) break
+        streakNow++
+      }
+      if (streakNow === 3 || streakNow === 5 || streakNow === 7) {
+        newToasts.push({
+          id: `${Date.now()}-streak-${streakNow}`,
+          playerColor: shooterStyle?.color ?? '#c9a227',
+          emoji: streakNow >= 5 ? '🔥🔥' : '🔥',
+          headline: shooter.display_name.toUpperCase(),
+          message: `${streakNow} in a row!`,
+        })
+      }
+    }
+
+    if (newToasts.length > 0) {
+      setMilestoneToasts(prev => [...prev, ...newToasts])
+      const ids = newToasts.map(t => t.id)
+      setTimeout(() => {
+        setMilestoneToasts(prev => prev.filter(t => !ids.includes(t.id)))
+      }, 4000)
+    }
+  }, [shots.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     async function flushPending() {
@@ -535,6 +608,20 @@ export default function GamePage() {
 
   const effectiveActivePlayerId = manualActivePlayer ?? (isP1Turn ? p1.id : p2.id)
 
+  // Consecutive pots by the current active player (streak display)
+  const activePlayerStreak = (() => {
+    const pid = effectiveActivePlayerId
+    let streak = 0
+    for (let i = shots.length - 1; i >= 0; i--) {
+      const s = shots[i]
+      if (s.player_id !== pid) break
+      const b = s.balls_potted ?? (s.potted ? 1 : 0)
+      if (b === 0 || s.is_error) break
+      streak++
+    }
+    return streak
+  })()
+
   const trashTalkLine = game.winner ? (() => {
     const wStats = game.winner_id === p1.id ? p1Stats : p2Stats
     const lStats = game.winner_id === p1.id ? p2Stats : p1Stats
@@ -643,6 +730,25 @@ export default function GamePage() {
           )
         })}
       </div>
+
+      {/* Hot streak banner — visible to all watchers */}
+      {!game.is_complete && shots.length > 0 && activePlayerStreak >= 2 && (() => {
+        const sid = effectiveActivePlayerId
+        const streakStyle = sid === p1.id ? p1Style : p2Style
+        const streakPlayer = sid === p1.id ? p1 : p2
+        const flames = activePlayerStreak >= 7 ? '🔥🔥🔥' : activePlayerStreak >= 5 ? '🔥🔥' : '🔥'
+        return (
+          <div
+            className="mx-4 mb-2 flex items-center justify-center gap-2 px-4 py-2 rounded-xl border animate-slide-down"
+            style={{ borderColor: `${streakStyle?.color}40`, background: `${streakStyle?.color}12` }}
+          >
+            <span className="text-sm leading-none">{flames}</span>
+            <span className="font-heading text-sm tracking-widest" style={{ color: streakStyle?.color }}>
+              {streakPlayer.display_name.toUpperCase()} — {activePlayerStreak} IN A ROW
+            </span>
+          </div>
+        )
+      })()}
 
       {/* ── Main content: recap | break entry | shot entry | watching ── */}
       {game.is_complete ? (
@@ -1248,6 +1354,32 @@ export default function GamePage() {
               GOT IT
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Milestone toasts */}
+      {milestoneToasts.length > 0 && (
+        <div className="fixed inset-x-0 bottom-4 z-[60] flex flex-col items-center gap-2 pointer-events-none px-4">
+          {milestoneToasts.map(toast => (
+            <div key={toast.id} className="animate-slide-up max-w-sm w-full">
+              <div
+                className="flex items-center gap-3 px-4 py-3.5 rounded-2xl border"
+                style={{
+                  borderColor: `${toast.playerColor}50`,
+                  background: `linear-gradient(135deg, ${toast.playerColor}22 0%, #060d08 100%)`,
+                  boxShadow: `0 0 40px ${toast.playerColor}40, 0 8px 32px rgba(0,0,0,0.6)`,
+                }}
+              >
+                <span className="text-3xl leading-none">{toast.emoji}</span>
+                <div>
+                  <p className="font-heading text-[11px] tracking-[0.2em] leading-none mb-1" style={{ color: toast.playerColor }}>
+                    {toast.headline}
+                  </p>
+                  <p className="font-body text-base text-pool-chalk leading-none">{toast.message}</p>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
