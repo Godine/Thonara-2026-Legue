@@ -178,12 +178,12 @@ export default function GamePage() {
         .reduce((sum, s) => sum + (s.balls_potted ?? (s.potted ? 1 : 0)), 0)
       const careerNow = careerBefore + gamePots
       const careerPrev = careerNow - shotBalls
-      for (const threshold of [25, 50, 100, 200, 500]) {
+      for (const threshold of [25, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000]) {
         if (careerPrev < threshold && careerNow >= threshold) {
           newToasts.push({
             id: `${Date.now()}-career-${threshold}`,
             playerColor: shooterStyle?.color ?? '#c9a227',
-            emoji: threshold >= 200 ? '🤩' : '💯',
+            emoji: threshold >= 500 ? '👑' : threshold >= 200 ? '🤩' : '💯',
             headline: shooter.display_name.toUpperCase(),
             message: `${threshold} career pots!`,
           })
