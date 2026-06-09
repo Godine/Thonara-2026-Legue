@@ -122,6 +122,7 @@ type CreateSessionResult = { ok: true; id: string } | { ok: false; error: string
 export async function createSession(
   db: SupabaseClient,
   date: string,
+  gameCount: number = 6,
 ): Promise<CreateSessionResult> {
   const { data: players, error: playerErr } = await db
     .from('players')
@@ -146,8 +147,13 @@ export async function createSession(
   if (sessionErr || !session)
     return { ok: false, error: 'Failed to create session.' }
 
+  const schedule = Array.from({ length: gameCount }, (_, i) => ({
+    ...GAME_SCHEDULE[i % GAME_SCHEDULE.length],
+    gameNumber: i + 1,
+  }))
+
   const { error: gamesErr } = await db.from('games').insert(
-    GAME_SCHEDULE.map(g => ({
+    schedule.map(g => ({
       session_id: session.id,
       game_number: g.gameNumber,
       player1_id: byUsername[g.player1],
