@@ -111,10 +111,14 @@ export async function fetchAllSessions(db: SupabaseClient, limit = 20): Promise<
 export async function findSessionByDate(db: SupabaseClient, date: string) {
   const { data } = await db
     .from('sessions')
-    .select('id')
+    .select('id, games(id)')
     .eq('date', date)
     .maybeSingle()
-  return data as { id: string } | null
+  if (!data) return null
+  // Ignore orphaned sessions where game creation failed
+  const gameCount = Array.isArray((data as any).games) ? (data as any).games.length : 0
+  if (gameCount === 0) return null
+  return { id: data.id } as { id: string }
 }
 
 type CreateSessionResult = { ok: true; id: string } | { ok: false; error: string }
@@ -160,8 +164,10 @@ export async function createSession(
       player2_id: byUsername[g.player2],
     }))
   )
-  if (gamesErr)
+  if (gamesErr) {
+    await db.from('sessions').delete().eq('id', session.id)
     return { ok: false, error: 'Failed to create games.' }
+  }
 
   return { ok: true, id: session.id }
 }
