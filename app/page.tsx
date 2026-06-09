@@ -353,7 +353,7 @@ export default function Dashboard() {
                   RACK&nbsp;'EM UP
                 </p>
                 <p className="font-body text-[11px] mt-2 leading-none" style={{ color: '#f0ede640' }}>
-                  3 players · 6 games · let&apos;s go
+                  3 players · let&apos;s play
                 </p>
               </div>
               <div

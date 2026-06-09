@@ -61,7 +61,7 @@ CREATE POLICY "sessions_update" ON public.sessions
 CREATE TABLE IF NOT EXISTS public.games (
   id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id        UUID        NOT NULL REFERENCES public.sessions(id) ON DELETE CASCADE,
-  game_number       INTEGER     NOT NULL CHECK (game_number BETWEEN 1 AND 6),
+  game_number       INTEGER     NOT NULL CHECK (game_number BETWEEN 1 AND 12),
   player1_id        UUID        NOT NULL REFERENCES public.players(id),
   player2_id        UUID        NOT NULL REFERENCES public.players(id),
   winner_id         UUID        REFERENCES public.players(id),

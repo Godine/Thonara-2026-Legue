@@ -386,7 +386,7 @@ export default function SessionPage() {
           {/* ── Game lineup ── */}
           <div className="rounded-2xl border border-pool-border bg-pool-surface overflow-hidden">
             <div className="px-4 py-2.5 border-b border-pool-border">
-              <p className="font-heading text-[10px] tracking-[0.25em] text-pool-chalk-dim">TONIGHT&apos;S 6 GAMES</p>
+              <p className="font-heading text-[10px] tracking-[0.25em] text-pool-chalk-dim">TONIGHT&apos;S {session.games.length} GAMES</p>
             </div>
             <div className="divide-y divide-pool-border/60">
               {session.games.map(g => {
@@ -433,7 +433,7 @@ export default function SessionPage() {
             <div className="relative flex items-center justify-between px-7 py-6">
               <div>
                 <p className="font-body text-[10px] tracking-[0.4em] uppercase mb-1.5 leading-none" style={{ color: '#c9a22780' }}>
-                  6 games · let&apos;s go
+                  {session.games.length} games · let&apos;s go
                 </p>
                 <p
                   className="font-heading text-[2.4rem] leading-none tracking-wider"
