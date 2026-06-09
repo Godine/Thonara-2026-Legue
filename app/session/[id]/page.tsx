@@ -13,7 +13,7 @@ import {
 import { getPlayerStats } from '@/lib/stats'
 import { generateNarrative } from '@/lib/narrative'
 import { getSessionPrediction } from '@/lib/session-prediction'
-import { GAME_SCHEDULE, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
+import { PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import PlayerBall from '@/components/PlayerBall'
 import type { Game, Player, Shot } from '@/types/database'
 
@@ -392,7 +392,6 @@ export default function SessionPage() {
               {session.games.map(g => {
                 const p1s = PLAYER_STYLES[g.player1.username as PlayerUsername]
                 const p2s = PLAYER_STYLES[g.player2.username as PlayerUsername]
-                const sched = GAME_SCHEDULE.find(s => s.gameNumber === g.game_number)
                 return (
                   <div key={g.id} className="flex items-center gap-2 px-4 py-2.5">
                     <span className="font-heading text-xs text-pool-chalk-dim/50 w-4 shrink-0">{g.game_number}</span>
@@ -409,11 +408,6 @@ export default function SessionPage() {
                       </span>
                       {p2s && <PlayerBall number={p2s.number} color={p2s.color} size={18} />}
                     </div>
-                    {sched && (
-                      <span className="font-body text-[9px] text-pool-chalk-dim/40 w-12 text-right shrink-0">
-                        {PLAYER_STYLES[sched.scorer as PlayerUsername]?.label} 📝
-                      </span>
-                    )}
                   </div>
                 )
               })}
@@ -515,7 +509,6 @@ export default function SessionPage() {
           const gameShots = game.shots ?? []
           const p1Stats = getPlayerStats(gameShots, game.player1_id)
           const p2Stats = getPlayerStats(gameShots, game.player2_id)
-          const schedule = GAME_SCHEDULE.find(g => g.gameNumber === game.game_number)
           const p1Style = PLAYER_STYLES[game.player1.username as PlayerUsername]
           const p2Style = PLAYER_STYLES[game.player2.username as PlayerUsername]
           const isQuickOpen = quick?.gameId === game.id
@@ -643,13 +636,8 @@ export default function SessionPage() {
               )}
 
               {!game.is_complete && !isQuickOpen && (
-                <div className="flex items-center justify-between px-4 py-2 border-t border-pool-border gap-2">
-                  {schedule && (
-                    <p className="text-xs font-body text-pool-chalk-dim">
-                      {PLAYER_STYLES[schedule.scorer as PlayerUsername]?.label} scores
-                    </p>
-                  )}
-                  <div className="flex gap-2 ml-auto">
+                <div className="flex items-center justify-end px-4 py-2 border-t border-pool-border gap-2">
+                  <div className="flex gap-2">
                     <button
                       onClick={() => setQuick({ gameId: game.id, winnerId: game.player1_id, blackBall: false })}
                       className="px-3 py-1.5 rounded-lg border border-pool-border font-heading text-xs tracking-wider text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all active:scale-95"
