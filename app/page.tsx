@@ -190,7 +190,7 @@ async function FireStreaksStream() {
     }
 
     return { username, style, current, best, last10: results.slice(-10) }
-  })
+  }).sort((a, b) => b.current - a.current || b.best - a.best)
 
   return (
     <section className="px-4 pb-5">
