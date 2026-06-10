@@ -3,10 +3,16 @@
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
+import { format } from 'date-fns'
 import { PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import { getStoredPlayer, clearStoredPlayer } from './PlayerGate'
 import PlayerBall from './PlayerBall'
 import PlayerAvatar from './PlayerAvatar'
+import { createClient } from '@/lib/supabase/client'
+import { fetchCompletedGames, fetchAllShots } from '@/lib/queries'
+import { ACHIEVEMENTS, RARITY_STYLES, computeAchievementUnlocks, type AchievementUnlock } from '@/lib/achievements'
+
+const BADGES_SEEN_KEY = 'thonara_badges_seen'
 
 const NAV_LINKS = [
   { href: '/achievements', label: 'Badges',   icon: '🏅' },
@@ -19,11 +25,14 @@ const NAV_LINKS = [
 export default function Navbar() {
   const [username, setUsername]   = useState<PlayerUsername | null>(null)
   const [menuOpen, setMenuOpen]   = useState(false)
+  const [bellOpen, setBellOpen]   = useState(false)
+  const [unlocks, setUnlocks]     = useState<AchievementUnlock[]>([])
+  const [hasNew, setHasNew]       = useState(false)
   const navRef                    = useRef<HTMLElement>(null)
   const pathname                  = usePathname()
 
-  // Close menu on navigation
-  useEffect(() => { setMenuOpen(false) }, [pathname])
+  // Close menus on navigation
+  useEffect(() => { setMenuOpen(false); setBellOpen(false) }, [pathname])
 
   useEffect(() => {
     setUsername(getStoredPlayer())
@@ -34,8 +43,10 @@ export default function Navbar() {
 
     // Close on outside click
     const onOutside = (e: MouseEvent) => {
-      if (navRef.current && !navRef.current.contains(e.target as Node))
+      if (navRef.current && !navRef.current.contains(e.target as Node)) {
         setMenuOpen(false)
+        setBellOpen(false)
+      }
     }
     document.addEventListener('mousedown', onOutside)
 
@@ -45,6 +56,52 @@ export default function Navbar() {
       document.removeEventListener('mousedown', onOutside)
     }
   }, [])
+
+  // Fetch + recompute badge unlock history (live)
+  useEffect(() => {
+    const db = createClient()
+    let cancelled = false
+
+    const load = async () => {
+      const [games, shots] = await Promise.all([fetchCompletedGames(db), fetchAllShots(db)])
+      if (cancelled) return
+      const computed = computeAchievementUnlocks(games as any, shots as any)
+      setUnlocks(computed)
+
+      if (computed.length > 0) {
+        const seen = localStorage.getItem(BADGES_SEEN_KEY)
+        if (seen === null) {
+          localStorage.setItem(BADGES_SEEN_KEY, computed[0].id)
+          setHasNew(false)
+        } else {
+          setHasNew(seen !== computed[0].id)
+        }
+      }
+    }
+    load()
+
+    const channel = db
+      .channel('navbar-badge-unlocks')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shots' }, load)
+      .subscribe()
+
+    return () => {
+      cancelled = true
+      db.removeChannel(channel)
+    }
+  }, [])
+
+  const toggleBell = () => {
+    setBellOpen(o => {
+      const next = !o
+      if (next && unlocks.length > 0) {
+        localStorage.setItem(BADGES_SEEN_KEY, unlocks[0].id)
+        setHasNew(false)
+      }
+      return next
+    })
+  }
 
   const switchPlayer = () => {
     clearStoredPlayer()
@@ -89,6 +146,78 @@ export default function Navbar() {
                   {link.label}
                 </Link>
               ))}
+            </div>
+
+            {/* Notification bell — badge unlock history */}
+            <div className="relative shrink-0">
+              <button
+                onClick={toggleBell}
+                className="relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-pool-surface transition-colors"
+                aria-label="Badge unlock history"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M12 2a6 6 0 0 0-6 6v3.09c0 .58-.23 1.14-.64 1.55L4 14h16l-1.36-1.36a2.2 2.2 0 0 1-.64-1.55V8a6 6 0 0 0-6-6Z"
+                    stroke="#f0ede6" strokeWidth="1.5" strokeLinejoin="round"
+                  />
+                  <path d="M9.5 18a2.5 2.5 0 0 0 5 0" stroke="#f0ede6" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                {hasNew && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-pool-gold animate-pulse-gold" />
+                )}
+              </button>
+
+              {bellOpen && (
+                <div className="absolute right-0 top-11 w-72 max-w-[calc(100vw-2rem)] bg-pool-surface border border-pool-border rounded-xl shadow-xl overflow-hidden animate-slide-down z-50">
+                  <div className="px-4 py-3 border-b border-pool-border">
+                    <p className="font-heading text-sm tracking-widest text-pool-gold">BADGE HISTORY</p>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto divide-y divide-pool-border">
+                    {unlocks.length === 0 ? (
+                      <p className="px-4 py-6 text-center text-sm font-body text-pool-chalk-dim">
+                        No badges unlocked yet — go play!
+                      </p>
+                    ) : (
+                      unlocks.slice(0, 20).map(u => {
+                        const badge = ACHIEVEMENTS.find(a => a.id === u.badgeId)
+                        const pStyle = PLAYER_STYLES[u.username]
+                        const rStyle = badge ? RARITY_STYLES[badge.rarity] : null
+                        return (
+                          <Link
+                            key={u.id}
+                            href={`/player/${u.username}`}
+                            onClick={() => setBellOpen(false)}
+                            className="flex items-start gap-3 px-4 py-3 hover:bg-pool-bg/60 transition-colors"
+                          >
+                            <div
+                              className="w-9 h-9 rounded-lg flex items-center justify-center text-lg shrink-0"
+                              style={{ background: rStyle?.bg, border: `1px solid ${rStyle?.border}` }}
+                            >
+                              {badge?.icon ?? '🏅'}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-body text-sm text-pool-chalk leading-snug">
+                                <span style={{ color: pStyle.color }} className="font-semibold">{pStyle.label}</span>
+                                {' '}unlocked <span className="text-pool-gold">{badge?.name ?? u.badgeId}</span>
+                              </p>
+                              <p className="text-xs font-body text-pool-chalk-dim mt-0.5">
+                                {u.sessionDate ? format(new Date(u.sessionDate + 'T12:00:00'), 'MMM d, yyyy') : ''} · Game {u.gameNumber}
+                              </p>
+                            </div>
+                          </Link>
+                        )
+                      })
+                    )}
+                  </div>
+                  <Link
+                    href="/achievements"
+                    onClick={() => setBellOpen(false)}
+                    className="block px-4 py-3 text-center text-sm font-body text-pool-gold hover:bg-pool-bg/60 transition-colors border-t border-pool-border"
+                  >
+                    View all badges →
+                  </Link>
+                </div>
+              )}
             </div>
 
             {/* Player chip — always visible */}

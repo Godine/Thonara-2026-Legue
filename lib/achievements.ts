@@ -497,3 +497,61 @@ export function computeAllProgress(
   }
   return result
 }
+
+export interface AchievementUnlock {
+  id: string
+  username: PlayerUsername
+  badgeId: string
+  sessionId: string
+  sessionDate: string
+  gameId: string
+  gameNumber: number
+}
+
+// Replays the full game history game-by-game to find the exact moment each
+// player first qualified for each badge. Returned newest-first.
+export function computeAchievementUnlocks(
+  games: RawGame[],
+  shots: RawShot[],
+): AchievementUnlock[] {
+  const sorted = [...games].sort((a, b) => {
+    const da = a.session?.date ?? '', db = b.session?.date ?? ''
+    return da !== db ? da.localeCompare(db) : a.game_number - b.game_number
+  })
+
+  const shotsByGame = new Map<string, RawShot[]>()
+  for (const s of shots) {
+    if (!shotsByGame.has(s.game_id)) shotsByGame.set(s.game_id, [])
+    shotsByGame.get(s.game_id)!.push(s)
+  }
+
+  const unlocks: AchievementUnlock[] = []
+  const earnedSoFar = {} as Record<PlayerUsername, Set<string>>
+  for (const u of PLAYERS) earnedSoFar[u] = new Set()
+
+  for (let i = 0; i < sorted.length; i++) {
+    const gamesUpToHere = sorted.slice(0, i + 1)
+    const shotsUpToHere = gamesUpToHere.flatMap(g => shotsByGame.get(g.id) ?? [])
+    const g = sorted[i]
+
+    for (const u of PLAYERS) {
+      const earned = computePlayerAchievements(u, gamesUpToHere, shotsUpToHere)
+      for (const badgeId of earned) {
+        if (!earnedSoFar[u].has(badgeId)) {
+          earnedSoFar[u].add(badgeId)
+          unlocks.push({
+            id: `${u}-${badgeId}`,
+            username: u,
+            badgeId,
+            sessionId: g.session_id,
+            sessionDate: g.session?.date ?? '',
+            gameId: g.id,
+            gameNumber: g.game_number,
+          })
+        }
+      }
+    }
+  }
+
+  return unlocks.reverse()
+}
