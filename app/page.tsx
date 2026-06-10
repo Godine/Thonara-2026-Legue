@@ -226,39 +226,50 @@ function FireStreakCard({ username, style, current, best, last10 }: {
         boxShadow: lit ? `0 0 24px ${style.color}12` : undefined,
       }}
     >
-      <div className="flex items-center gap-3">
-        <div
-          className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
-          style={{
-            background: lit ? `radial-gradient(circle, ${style.color}33 0%, ${style.color}08 70%)` : '#0e1e12',
-            border: `1.5px solid ${lit ? style.color + '55' : '#1f3525'}`,
-          }}
-        >
-          <span
-            className="text-2xl"
-            style={{ filter: lit ? `drop-shadow(0 0 6px ${style.color}99)` : 'grayscale(1) opacity(0.35)' }}
+      <div className="flex items-center gap-3.5">
+        {/* Avatar with flame badge */}
+        <div className="relative shrink-0">
+          <div style={{ filter: lit ? `drop-shadow(0 0 10px ${style.color}55)` : undefined }}>
+            <PlayerAvatar username={username} size={56} />
+          </div>
+          <div
+            className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center border-2 border-pool-surface"
+            style={{ background: lit ? `radial-gradient(circle, ${style.color}44 0%, ${style.color}11 70%)` : '#0e1e12' }}
           >
-            🔥
-          </span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <PlayerAvatar username={username} size={20} />
-            <span className="font-heading text-xs tracking-widest" style={{ color: style.color }}>
-              {style.label.toUpperCase()}
+            <span
+              className="text-base leading-none"
+              style={{ filter: lit ? `drop-shadow(0 0 5px ${style.color}99)` : 'grayscale(1) opacity(0.35)' }}
+            >
+              🔥
             </span>
           </div>
-          <div className="flex items-baseline gap-1.5 mt-0.5">
-            <span className="font-heading text-3xl text-pool-chalk leading-none">{current}</span>
-            <span className="font-body text-xs text-pool-chalk-dim">{current === 1 ? 'win' : 'wins'} in a row</span>
-          </div>
-          <p className="font-body text-xs text-pool-chalk-dim mt-0.5">
-            {message}{best > 1 ? ` · best ${best}` : ''}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="font-heading text-sm tracking-widest" style={{ color: style.color }}>
+            {style.label.toUpperCase()}
+          </p>
+          <p className="font-body text-xs text-pool-chalk-dim mt-1 leading-snug">
+            {message}
+            {best > 1 && <> · best <span className="text-pool-chalk">{best}</span></>}
+          </p>
+        </div>
+
+        {/* Big streak number */}
+        <div className="text-right shrink-0 pl-1">
+          <p
+            className="font-heading text-5xl leading-none tabular-nums"
+            style={{ color: lit ? style.color : '#7a786f' }}
+          >
+            {current}
+          </p>
+          <p className="font-body text-[10px] tracking-widest uppercase text-pool-chalk-dim mt-1">
+            {current === 1 ? 'win streak' : 'win streak'}
           </p>
         </div>
       </div>
 
-      <div className="mt-3">
+      <div className="mt-4">
         <div className="flex items-center justify-between mb-1.5">
           <span className="font-body text-[10px] tracking-widest uppercase text-pool-chalk-dim">Last 10 games</span>
           <span className="font-body text-[10px] tracking-widest uppercase text-pool-chalk-dim">Latest →</span>
@@ -269,11 +280,12 @@ function FireStreakCard({ username, style, current, best, last10 }: {
             return (
               <div
                 key={i}
-                className="flex-1 h-2.5 rounded-full"
+                className="flex-1 h-3 rounded-full"
                 style={{
                   background:
                     result === true  ? `linear-gradient(90deg, ${style.color}99, ${style.color})` :
                     result === false ? '#1f3525' : '#13201a',
+                  boxShadow: result === true ? `0 0 8px ${style.color}66` : undefined,
                 }}
               />
             )
@@ -399,17 +411,20 @@ function FireStreaksSkeleton() {
       <div className="space-y-2 animate-pulse">
         {[0, 1, 2].map(i => (
           <div key={i} className="bg-pool-surface rounded-2xl border border-pool-border p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-pool-border shrink-0" />
+            <div className="flex items-center gap-3.5">
+              <div className="w-14 h-14 rounded-full bg-pool-border shrink-0" />
               <div className="flex-1 space-y-2">
                 <div className="h-3 bg-pool-border rounded w-16" />
-                <div className="h-7 bg-pool-border rounded w-24" />
-                <div className="h-2.5 bg-pool-border rounded w-32" />
+                <div className="h-3 bg-pool-border rounded w-28" />
+              </div>
+              <div className="space-y-2 shrink-0">
+                <div className="h-9 bg-pool-border rounded w-10 ml-auto" />
+                <div className="h-2 bg-pool-border rounded w-14" />
               </div>
             </div>
-            <div className="flex gap-1 mt-3">
+            <div className="flex gap-1 mt-4">
               {[0,1,2,3,4,5,6,7,8,9].map(j => (
-                <div key={j} className="flex-1 h-2.5 bg-pool-border rounded-full" />
+                <div key={j} className="flex-1 h-3 bg-pool-border rounded-full" />
               ))}
             </div>
           </div>
