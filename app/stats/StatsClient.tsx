@@ -90,14 +90,6 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
     playerIdMap[g.player2.username as PlayerUsername] = g.player2_id
   }
 
-  const form: Record<PlayerUsername, boolean[]> = { adib: [], ahmed: [], godine: [] }
-  for (const u of PLAYERS) {
-    const pid = playerIdMap[u]
-    if (!pid) continue
-    const myGames = games.filter(g => g.player1_id === pid || g.player2_id === pid)
-    form[u] = myGames.slice(-5).map(g => g.winner_id === pid)
-  }
-
   for (const g of games) {
     const p1u = g.player1.username as PlayerUsername
     const p2u = g.player2.username as PlayerUsername
@@ -490,57 +482,6 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
               </div>
             )
           }))}
-        </div>
-      </section>
-
-      {/* ── FORM & STREAKS ──────────────────────────────────────────── */}
-      <section className="px-4 py-2">
-        <SectionHeader title="FORM & STREAKS" sub="last 5 games" />
-        <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden mt-3">
-          {standings.map((p, i) => {
-            const style = PLAYER_STYLES[p.username]
-            return (
-              <div
-                key={p.username}
-                className={`flex items-center gap-3 px-4 py-3 ${i < standings.length - 1 ? 'border-b border-pool-border' : ''}`}
-              >
-                <PlayerAvatar username={p.username} size={36} />
-                <div className="flex-1 min-w-0">
-                  <p className="font-heading text-sm tracking-wide" style={{ color: style.color }}>
-                    {p.displayName.toUpperCase()}
-                  </p>
-                  <div className="flex items-center gap-1 mt-1">
-                    {(form[p.username] ?? []).length > 0
-                      ? (form[p.username] ?? []).map((win, j) => (
-                          <span
-                            key={j}
-                            className="w-5 h-5 rounded-full flex items-center justify-center font-heading"
-                            style={{
-                              fontSize: 9,
-                              background: win ? `${style.color}22` : '#0e1e12',
-                              color:      win ? style.color : '#7a786f',
-                              border:     `1.5px solid ${win ? style.color + '55' : '#1f3525'}`,
-                            }}
-                          >
-                            {win ? 'W' : 'L'}
-                          </span>
-                        ))
-                      : <span className="font-body text-xs text-pool-chalk-dim">No games yet</span>
-                    }
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  {currentStreaks[p.username] > 1
-                    ? <p className="font-heading text-base text-pool-gold">🔥 {currentStreaks[p.username]}</p>
-                    : <p className="font-body text-sm text-pool-chalk-dim">—</p>
-                  }
-                  <p className="font-body text-xs text-pool-chalk-dim">
-                    {longestStreaks[p.username] > 1 ? `Best: ${longestStreaks[p.username]}` : '—'}
-                  </p>
-                </div>
-              </div>
-            )
-          })}
         </div>
       </section>
 

@@ -155,6 +155,135 @@ async function StandingsStream() {
   )
 }
 
+async function FireStreaksStream() {
+  const db = createClient()
+  const games = await fetchCompletedGames(db)
+
+  // Sort chronologically — all games in a session share the same created_at,
+  // so ordering by game_number within a session keeps streaks accurate.
+  const sorted = [...games].sort((a, b) => {
+    const da = a.session?.date ?? '', dbDate = b.session?.date ?? ''
+    return da !== dbDate ? da.localeCompare(dbDate) : a.game_number - b.game_number
+  })
+
+  const playerIdMap: Partial<Record<PlayerUsername, string>> = {}
+  for (const g of sorted) {
+    playerIdMap[g.player1.username as PlayerUsername] = g.player1_id
+    playerIdMap[g.player2.username as PlayerUsername] = g.player2_id
+  }
+
+  const players = PLAYERS.map(username => {
+    const style = PLAYER_STYLES[username]
+    const pid = playerIdMap[username]
+    const results = pid
+      ? sorted.filter(g => g.player1_id === pid || g.player2_id === pid).map(g => g.winner_id === pid)
+      : []
+
+    let current = 0
+    for (let i = results.length - 1; i >= 0; i--) {
+      if (results[i]) current++
+      else break
+    }
+    let best = 0, cur = 0
+    for (const r of results) {
+      if (r) { cur++; best = Math.max(best, cur) } else cur = 0
+    }
+
+    return { username, style, current, best, last10: results.slice(-10) }
+  })
+
+  return (
+    <section className="px-4 pb-5">
+      <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim mb-3">WIN STREAKS</p>
+      <div className="space-y-2">
+        {players.map(p => <FireStreakCard key={p.username} {...p} />)}
+      </div>
+    </section>
+  )
+}
+
+function FireStreakCard({ username, style, current, best, last10 }: {
+  username: PlayerUsername
+  style: typeof PLAYER_STYLES[PlayerUsername]
+  current: number
+  best: number
+  last10: boolean[]
+}) {
+  const lit = current > 0
+  const message =
+    current === 0 ? 'Time to start a new streak' :
+    current === 1 ? 'Just getting started' :
+    current < 4   ? 'Building momentum' :
+    current < 7   ? 'On fire!' : 'Unstoppable!'
+
+  const padding = 10 - last10.length
+
+  return (
+    <div
+      className="bg-pool-surface rounded-2xl border p-4"
+      style={{
+        borderColor: lit ? `${style.color}40` : '#1f3525',
+        boxShadow: lit ? `0 0 24px ${style.color}12` : undefined,
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
+          style={{
+            background: lit ? `radial-gradient(circle, ${style.color}33 0%, ${style.color}08 70%)` : '#0e1e12',
+            border: `1.5px solid ${lit ? style.color + '55' : '#1f3525'}`,
+          }}
+        >
+          <span
+            className="text-2xl"
+            style={{ filter: lit ? `drop-shadow(0 0 6px ${style.color}99)` : 'grayscale(1) opacity(0.35)' }}
+          >
+            🔥
+          </span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <PlayerAvatar username={username} size={20} />
+            <span className="font-heading text-xs tracking-widest" style={{ color: style.color }}>
+              {style.label.toUpperCase()}
+            </span>
+          </div>
+          <div className="flex items-baseline gap-1.5 mt-0.5">
+            <span className="font-heading text-3xl text-pool-chalk leading-none">{current}</span>
+            <span className="font-body text-xs text-pool-chalk-dim">{current === 1 ? 'win' : 'wins'} in a row</span>
+          </div>
+          <p className="font-body text-xs text-pool-chalk-dim mt-0.5">
+            {message}{best > 1 ? ` · best ${best}` : ''}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="font-body text-[10px] tracking-widest uppercase text-pool-chalk-dim">Last 10 games</span>
+          <span className="font-body text-[10px] tracking-widest uppercase text-pool-chalk-dim">Latest →</span>
+        </div>
+        <div className="flex gap-1">
+          {Array.from({ length: 10 }).map((_, i) => {
+            const result = i < padding ? null : last10[i - padding]
+            return (
+              <div
+                key={i}
+                className="flex-1 h-2.5 rounded-full"
+                style={{
+                  background:
+                    result === true  ? `linear-gradient(90deg, ${style.color}99, ${style.color})` :
+                    result === false ? '#1f3525' : '#13201a',
+                }}
+              />
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 async function NearBadgesStream() {
   const db = createClient()
   const [games, shots] = await Promise.all([
@@ -260,6 +389,33 @@ function StandingsSkeleton() {
         </div>
       </section>
     </>
+  )
+}
+
+function FireStreaksSkeleton() {
+  return (
+    <section className="px-4 pb-5">
+      <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim mb-3">WIN STREAKS</p>
+      <div className="space-y-2 animate-pulse">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="bg-pool-surface rounded-2xl border border-pool-border p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-pool-border shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 bg-pool-border rounded w-16" />
+                <div className="h-7 bg-pool-border rounded w-24" />
+                <div className="h-2.5 bg-pool-border rounded w-32" />
+              </div>
+            </div>
+            <div className="flex gap-1 mt-3">
+              {[0,1,2,3,4,5,6,7,8,9].map(j => (
+                <div key={j} className="flex-1 h-2.5 bg-pool-border rounded-full" />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -375,6 +531,11 @@ export default function Dashboard() {
       {/* ── NARRATIVE + STANDINGS (streams in) ───────────────────────── */}
       <Suspense fallback={<StandingsSkeleton />}>
         <StandingsStream />
+      </Suspense>
+
+      {/* ── WIN STREAKS / FIRE TRACKER (streams in) ──────────────────── */}
+      <Suspense fallback={<FireStreaksSkeleton />}>
+        <FireStreaksStream />
       </Suspense>
 
       {/* ── NAV GRID ─────────────────────────────────────────────────── */}
