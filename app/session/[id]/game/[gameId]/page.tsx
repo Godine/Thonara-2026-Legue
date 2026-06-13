@@ -563,12 +563,26 @@ export default function GamePage() {
   const p1Stats = getPlayerStats(shots, p1.id)
   const p2Stats = getPlayerStats(shots, p2.id)
 
-  // Whose turn: pot (no foul) keeps the shooter's turn, miss/error/foul switches it
-  const lastShot = shots.length > 0 ? shots[shots.length - 1] : null
-  const lastShotPotted = lastShot
-    ? ((lastShot.balls_potted ?? (lastShot.potted ? 1 : 0)) > 0) && !lastShot.is_error
-    : false
-  const isP1Turn = !lastShot ? true : (lastShot.player_id === p1.id) === lastShotPotted
+  // Whose turn: a pot (no foul) keeps the shooter's turn, a miss switches it.
+  // A foul (error) switches the turn AND grants the new player an extra "free"
+  // shot — their first miss on that extra turn doesn't switch it back.
+  const isP1Turn = (() => {
+    if (shots.length === 0) return true
+    const sorted = [...shots].sort((a, b) => a.shot_number - b.shot_number)
+    let currentPlayerId = sorted[0].player_id
+    let extraTurn = false
+    for (const s of sorted) {
+      const potted = ((s.balls_potted ?? (s.potted ? 1 : 0)) > 0) && !s.is_error
+      if (s.is_error) {
+        currentPlayerId = currentPlayerId === p1.id ? p2.id : p1.id
+        extraTurn = true
+      } else if (!potted) {
+        if (extraTurn) extraTurn = false
+        else currentPlayerId = currentPlayerId === p1.id ? p2.id : p1.id
+      }
+    }
+    return currentPlayerId === p1.id
+  })()
 
   const odds = computeOdds(
     shots, p1.id, p2.id,
