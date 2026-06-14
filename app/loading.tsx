@@ -1,6 +1,6 @@
 export default function HomeLoading() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-10" style={{ background: '#060d08' }}>
+    <div className="min-h-screen flex flex-col items-center justify-center gap-10" style={{ background: 'rgb(var(--pool-bg))' }}>
       {/* Triangle rack of balls */}
       <div className="relative" style={{ width: 120, height: 104 }}>
         {/* Row 1 */}
@@ -20,7 +20,7 @@ export default function HomeLoading() {
       </div>
 
       {/* Cue sweeping left to right */}
-      <div className="relative w-48 h-1 overflow-hidden rounded-full" style={{ background: '#1f3525' }}>
+      <div className="relative w-48 h-1 overflow-hidden rounded-full" style={{ background: 'rgb(var(--pool-border))' }}>
         <div
           className="absolute inset-y-0 left-0 w-16 rounded-full"
           style={{

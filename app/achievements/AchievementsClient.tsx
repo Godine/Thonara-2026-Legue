@@ -132,7 +132,7 @@ export default function AchievementsClient({ games, shots }: Props) {
                     key={achievement.id}
                     className="bg-pool-surface rounded-2xl border p-4 transition-all"
                     style={{
-                      borderColor: isUnlocked ? rs.border : '#1f3525',
+                      borderColor: isUnlocked ? rs.border : 'rgb(var(--pool-border))',
                       background:  isUnlocked ? rs.bg    : undefined,
                     }}
                   >

@@ -1,5 +1,11 @@
 import type { Config } from 'tailwindcss'
 
+// Reads a CSS variable storing an "R G B" triplet and applies Tailwind's
+// opacity modifier (e.g. bg-pool-gold/10) via rgb(var(--x) / <alpha-value>).
+function withOpacity(varName: string) {
+  return `rgb(var(${varName}) / <alpha-value>)`
+}
+
 const config: Config = {
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
@@ -10,17 +16,19 @@ const config: Config = {
     extend: {
       colors: {
         pool: {
-          bg: '#060d08',
-          surface: '#0e1e12',
-          felt: '#1a4731',
-          'felt-light': '#246340',
-          border: '#1f3525',
-          gold: '#c9a227',
-          'gold-light': '#e8c547',
-          chalk: '#f0ede6',
-          'chalk-dim': '#7a786f',
-          red: '#ef4444',
-          'green-bright': '#22c55e',
+          bg: withOpacity('--pool-bg'),
+          surface: withOpacity('--pool-surface'),
+          felt: withOpacity('--pool-felt'),
+          'felt-light': withOpacity('--pool-felt-light'),
+          border: withOpacity('--pool-border'),
+          gold: withOpacity('--pool-gold'),
+          'gold-light': withOpacity('--pool-gold-light'),
+          chalk: withOpacity('--pool-chalk'),
+          'chalk-dim': withOpacity('--pool-chalk-dim'),
+          red: withOpacity('--pool-red'),
+          'green-bright': withOpacity('--pool-green-bright'),
+          dot: withOpacity('--pool-dot'),
+          track: withOpacity('--pool-track'),
         },
       },
       fontFamily: {

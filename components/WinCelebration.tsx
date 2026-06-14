@@ -55,7 +55,7 @@ export default function WinCelebration({ winner, loser, onDismiss }: Props) {
       <div
         className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden"
         style={{
-          background: `radial-gradient(ellipse at center, ${winStyle?.color ?? '#fff'}18 0%, #060d08f0 65%)`,
+          background: `radial-gradient(ellipse at center, ${winStyle?.color ?? '#fff'}18 0%, rgb(var(--pool-bg) / 0.94) 65%)`,
           cursor: 'pointer',
         }}
         onClick={onDismiss}

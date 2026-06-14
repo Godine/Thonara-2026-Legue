@@ -1,6 +1,6 @@
 export default function AchievementsLoading() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-5" style={{ background: '#060d08' }}>
+    <div className="min-h-screen flex flex-col items-center justify-center gap-5" style={{ background: 'rgb(var(--pool-bg))' }}>
       <div className="relative">
         <div
           className="w-16 h-16 rounded-full flex items-center justify-center text-3xl"

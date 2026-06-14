@@ -1,6 +1,6 @@
 export default function PlayerLoading() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-6" style={{ background: '#060d08' }}>
+    <div className="min-h-screen flex flex-col items-center justify-center gap-6" style={{ background: 'rgb(var(--pool-bg))' }}>
       <div
         className="w-20 h-20 rounded-full"
         style={{

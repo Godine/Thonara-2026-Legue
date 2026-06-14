@@ -7,7 +7,7 @@ export default function StatsLoading() {
   ]
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-8" style={{ background: '#060d08' }}>
+    <div className="min-h-screen flex flex-col items-center justify-center gap-8" style={{ background: 'rgb(var(--pool-bg))' }}>
       {/* Rolling balls */}
       <div className="flex gap-4">
         {balls.map(({ n, color }, i) => (

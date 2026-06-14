@@ -2,12 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens — each stored as an "R G B" triplet so Tailwind's
+   rgb(var(--x) / <alpha-value>) pattern can apply opacity modifiers
+   (e.g. bg-pool-gold/10). Toggle with the .light class on <html>. */
 :root {
-  --pool-bg: #060d08;
-  --pool-surface: #0e1e12;
-  --pool-felt: #1a4731;
-  --pool-gold: #c9a227;
-  --pool-chalk: #f0ede6;
+  --pool-bg: 6 13 8;
+  --pool-surface: 14 30 18;
+  --pool-felt: 26 71 49;
+  --pool-felt-light: 36 99 64;
+  --pool-border: 31 53 37;
+  --pool-gold: 201 162 39;
+  --pool-gold-light: 232 197 71;
+  --pool-chalk: 240 237 230;
+  --pool-chalk-dim: 122 120 111;
+  --pool-red: 239 68 68;
+  --pool-green-bright: 34 197 94;
+  --pool-dot: 13 26 15;
+  --pool-track: 19 32 26;
+}
+
+:root.light {
+  --pool-bg: 244 241 234;
+  --pool-surface: 255 255 255;
+  --pool-border: 226 222 211;
+  --pool-chalk: 27 36 32;
+  --pool-chalk-dim: 122 120 111;
+  --pool-dot: 221 217 207;
+  --pool-track: 236 232 222;
 }
 
 * {
@@ -15,20 +36,21 @@
 }
 
 body {
-  background-color: var(--pool-bg);
-  color: var(--pool-chalk);
+  background-color: rgb(var(--pool-bg));
+  color: rgb(var(--pool-chalk));
   font-family: var(--font-dm-sans), system-ui, sans-serif;
   min-height: 100dvh;
   overscroll-behavior: none;
   /* Subtle dot-grain texture over the background */
-  background-image: radial-gradient(circle, #0d1a0f 1px, transparent 1px);
+  background-image: radial-gradient(circle, rgb(var(--pool-dot)) 1px, transparent 1px);
   background-size: 24px 24px;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #1f3525; border-radius: 99px; }
+::-webkit-scrollbar-thumb { background: rgb(var(--pool-border)); border-radius: 99px; }
 
 /* Gold shimmer text */
 .gold-shimmer {
@@ -47,7 +69,7 @@ body {
 
 /* Felt table background */
 .felt-bg {
-  background-color: var(--pool-felt);
+  background-color: rgb(var(--pool-felt));
   background-image:
     radial-gradient(ellipse at 50% 0%, #246340 0%, #1a4731 60%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6'%3E%3Crect width='6' height='6' fill='%231a4731'/%3E%3Crect x='0' y='0' width='1' height='1' fill='white' opacity='0.025'/%3E%3Crect x='3' y='3' width='1' height='1' fill='white' opacity='0.025'/%3E%3C/svg%3E");
@@ -81,7 +103,7 @@ body {
 
 /* Navbar glass border */
 .nav-glass {
-  background: linear-gradient(180deg, rgba(6,13,8,0.97) 0%, rgba(14,30,18,0.95) 100%);
+  background: linear-gradient(180deg, rgb(var(--pool-bg) / 0.97) 0%, rgb(var(--pool-surface) / 0.95) 100%);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }

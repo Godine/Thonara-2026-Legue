@@ -352,9 +352,9 @@ export default function PlayerProfileClient({ username, games: _games, shots }: 
               <span key={i}
                 className="w-8 h-8 rounded-full flex items-center justify-center font-heading text-sm"
                 style={{
-                  background: win ? `${style.color}22` : '#0e1e12',
+                  background: win ? `${style.color}22` : 'rgb(var(--pool-surface))',
                   color:      win ? style.color        : '#7a786f',
-                  border:     `2px solid ${win ? style.color + '55' : '#1f3525'}`,
+                  border:     `2px solid ${win ? style.color + '55' : 'rgb(var(--pool-border))'}`,
                 }}
               >
                 {win ? 'W' : 'L'}

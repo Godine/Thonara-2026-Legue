@@ -41,7 +41,7 @@ export default function PlayerGate() {
   return (
     <div
       className="fixed inset-0 z-[200] flex flex-col items-center justify-center px-5 animate-fade-in overflow-hidden"
-      style={{ background: 'radial-gradient(ellipse at 50% 30%, #0e1e12 0%, #060d08 70%)' }}
+      style={{ background: 'radial-gradient(ellipse at 50% 30%, rgb(var(--pool-surface)) 0%, rgb(var(--pool-bg)) 70%)' }}
     >
       {/* Decorative background balls */}
       <div className="absolute -top-8 -left-8 opacity-[0.06] pointer-events-none">
@@ -94,8 +94,8 @@ export default function PlayerGate() {
                 style={{
                   background: isHovered
                     ? `linear-gradient(135deg, ${style.color}18 0%, ${style.color}08 100%)`
-                    : 'rgba(14,30,18,0.8)',
-                  borderColor: isHovered ? `${style.color}60` : '#1f3525',
+                    : 'rgb(var(--pool-surface) / 0.8)',
+                  borderColor: isHovered ? `${style.color}60` : 'rgb(var(--pool-border))',
                   boxShadow: isHovered ? `0 0 28px ${style.color}20` : 'none',
                 }}
               >

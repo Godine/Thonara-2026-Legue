@@ -1,6 +1,6 @@
 export default function HistoryLoading() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-5" style={{ background: '#060d08' }}>
+    <div className="min-h-screen flex flex-col items-center justify-center gap-5" style={{ background: 'rgb(var(--pool-bg))' }}>
       <div
         className="w-14 h-14 rounded-full flex items-center justify-center text-2xl"
         style={{

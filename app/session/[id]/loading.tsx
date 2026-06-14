@@ -1,10 +1,10 @@
 export default function SessionLoading() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-5" style={{ background: '#060d08' }}>
+    <div className="min-h-screen flex flex-col items-center justify-center gap-5" style={{ background: 'rgb(var(--pool-bg))' }}>
       <div
         className="w-12 h-12 rounded-full border-2"
         style={{
-          borderColor: '#1f3525',
+          borderColor: 'rgb(var(--pool-border))',
           borderTopColor: '#c9a227',
           animation: 'sessionSpin 0.9s linear infinite',
         }}

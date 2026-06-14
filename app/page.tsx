@@ -98,7 +98,7 @@ async function StandingsStream() {
                   href={`/player/${player.username}`}
                   className="relative block bg-pool-surface rounded-2xl border p-4 transition-all active:scale-[0.99]"
                   style={{
-                    borderColor: isLeader ? `${style.color}55` : '#1f3525',
+                    borderColor: isLeader ? `${style.color}55` : 'rgb(var(--pool-border))',
                     boxShadow:   isLeader ? `0 0 24px ${style.color}12` : undefined,
                   }}
                 >
@@ -222,7 +222,7 @@ function FireStreakCard({ username, style, current, best, last10 }: {
     <div
       className="bg-pool-surface rounded-2xl border p-4"
       style={{
-        borderColor: lit ? `${style.color}40` : '#1f3525',
+        borderColor: lit ? `${style.color}40` : 'rgb(var(--pool-border))',
         boxShadow: lit ? `0 0 24px ${style.color}12` : undefined,
       }}
     >
@@ -234,7 +234,7 @@ function FireStreakCard({ username, style, current, best, last10 }: {
           </div>
           <div
             className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center border-2 border-pool-surface"
-            style={{ background: lit ? `radial-gradient(circle, ${style.color}44 0%, ${style.color}11 70%)` : '#0e1e12' }}
+            style={{ background: lit ? `radial-gradient(circle, ${style.color}44 0%, ${style.color}11 70%)` : 'rgb(var(--pool-surface))' }}
           >
             <span
               className="text-base leading-none"
@@ -284,7 +284,7 @@ function FireStreakCard({ username, style, current, best, last10 }: {
                 style={{
                   background:
                     result === true  ? `linear-gradient(90deg, ${style.color}99, ${style.color})` :
-                    result === false ? '#1f3525' : '#13201a',
+                    result === false ? 'rgb(var(--pool-border))' : 'rgb(var(--pool-track))',
                   boxShadow: result === true ? `0 0 8px ${style.color}66` : undefined,
                 }}
               />

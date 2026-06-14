@@ -1,6 +1,6 @@
 export default function RecordsLoading() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-5" style={{ background: '#060d08' }}>
+    <div className="min-h-screen flex flex-col items-center justify-center gap-5" style={{ background: 'rgb(var(--pool-bg))' }}>
       <div
         className="text-4xl"
         style={{ animation: 'recPulse 1.2s ease-in-out infinite' }}

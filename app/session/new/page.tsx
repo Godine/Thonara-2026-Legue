@@ -66,7 +66,7 @@ export default function NewSessionPage() {
               disabled={loading !== null}
               className="relative overflow-hidden rounded-2xl border-2 transition-all duration-150 active:scale-[0.96] disabled:opacity-60 text-left"
               style={{
-                borderColor: loading !== null && !isLoading ? '#1f3525' : '#c9a22740',
+                borderColor: loading !== null && !isLoading ? 'rgb(var(--pool-border))' : '#c9a22740',
                 background: isLoading
                   ? 'linear-gradient(155deg, #1f5c38 0%, #0e2a1a 100%)'
                   : 'linear-gradient(155deg, #1a3a22 0%, #0e1e12 100%)',

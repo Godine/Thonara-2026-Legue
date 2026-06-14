@@ -704,7 +704,7 @@ export default function GamePage() {
                       background: (style?.color ?? '#fff') + '18',
                       boxShadow: `0 0 0 1px ${style?.color}60, 0 0 22px ${style?.color}50`,
                     }
-                  : { borderColor: '#1f3525' }
+                  : { borderColor: 'rgb(var(--pool-border))' }
               }
             >
               {/* Name + potted */}
@@ -727,7 +727,7 @@ export default function GamePage() {
                 <span className="font-heading text-3xl text-pool-chalk tabular-nums leading-none shrink-0 ml-1">{stats.potted}</span>
               </div>
               {/* Accuracy bar */}
-              <div className="h-1 rounded-full overflow-hidden mb-1.5" style={{ background: '#1f3525' }}>
+              <div className="h-1 rounded-full overflow-hidden mb-1.5" style={{ background: 'rgb(var(--pool-border))' }}>
                 <div className="h-full rounded-full transition-all duration-300" style={{ width: `${acc}%`, backgroundColor: style?.color }} />
               </div>
               {/* Accuracy + win odds */}
@@ -1380,7 +1380,7 @@ export default function GamePage() {
                 className="flex items-center gap-3 px-4 py-3.5 rounded-2xl border"
                 style={{
                   borderColor: `${toast.playerColor}50`,
-                  background: `linear-gradient(135deg, ${toast.playerColor}22 0%, #060d08 100%)`,
+                  background: `linear-gradient(135deg, ${toast.playerColor}22 0%, rgb(var(--pool-bg)) 100%)`,
                   boxShadow: `0 0 40px ${toast.playerColor}40, 0 8px 32px rgba(0,0,0,0.6)`,
                 }}
               >

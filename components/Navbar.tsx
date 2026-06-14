@@ -7,6 +7,7 @@ import { format } from 'date-fns'
 import { PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import { getStoredPlayer, clearStoredPlayer } from './PlayerGate'
 import PlayerAvatar from './PlayerAvatar'
+import ThemeToggle from './ThemeToggle'
 import { createClient } from '@/lib/supabase/client'
 import { fetchCompletedGames, fetchAllShots } from '@/lib/queries'
 import { ACHIEVEMENTS, RARITY_STYLES, computeAchievementUnlocks, type AchievementUnlock } from '@/lib/achievements'
@@ -183,9 +184,9 @@ export default function Navbar() {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                   <path
                     d="M12 2a6 6 0 0 0-6 6v3.09c0 .58-.23 1.14-.64 1.55L4 14h16l-1.36-1.36a2.2 2.2 0 0 1-.64-1.55V8a6 6 0 0 0-6-6Z"
-                    stroke="#f0ede6" strokeWidth="1.5" strokeLinejoin="round"
+                    stroke="rgb(var(--pool-chalk))" strokeWidth="1.5" strokeLinejoin="round"
                   />
-                  <path d="M9.5 18a2.5 2.5 0 0 0 5 0" stroke="#f0ede6" strokeWidth="1.5" strokeLinecap="round" />
+                  <path d="M9.5 18a2.5 2.5 0 0 0 5 0" stroke="rgb(var(--pool-chalk))" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
                 {newCount > 0 && (
                   <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-pool-gold flex items-center justify-center animate-pulse-gold">
@@ -291,16 +292,16 @@ export default function Navbar() {
                     width="10" height="10" viewBox="0 0 10 10"
                     className={`transition-transform duration-200 ${playerMenuOpen ? 'rotate-180' : ''}`}
                   >
-                    <path d="M2 3.5 L5 6.5 L8 3.5" stroke="#7a786f" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+                    <path d="M2 3.5 L5 6.5 L8 3.5" stroke="rgb(var(--pool-chalk-dim))" strokeWidth="1.5" fill="none" strokeLinecap="round" />
                   </svg>
                 </button>
               ) : (
                 /* No player selected — show placeholder chip */
                 <div className="flex items-center gap-2 bg-pool-surface border border-dashed border-pool-border rounded-xl px-2.5 py-1.5 opacity-60">
                   <svg width="22" height="22" viewBox="0 0 22 22">
-                    <circle cx="11" cy="11" r="10" fill="#1f3525" />
-                    <circle cx="11" cy="11" r="6" fill="#1f3525" stroke="#2e4a35" strokeWidth="1" />
-                    <text x="11" y="15" textAnchor="middle" fontSize="8" fill="#7a786f" fontFamily="DM Sans, sans-serif" fontWeight="700">?</text>
+                    <circle cx="11" cy="11" r="10" fill="rgb(var(--pool-border))" />
+                    <circle cx="11" cy="11" r="6" fill="rgb(var(--pool-border))" stroke="#2e4a35" strokeWidth="1" />
+                    <text x="11" y="15" textAnchor="middle" fontSize="8" fill="rgb(var(--pool-chalk-dim))" fontFamily="DM Sans, sans-serif" fontWeight="700">?</text>
                   </svg>
                   <span className="font-body text-xs text-pool-chalk-dim hidden xs:inline">Who are you?</span>
                 </div>
@@ -333,6 +334,9 @@ export default function Navbar() {
                     >
                       <span className="text-base w-5 text-center">📖</span> Rules
                     </Link>
+                  </div>
+                  <div className="border-t border-pool-border py-1">
+                    <ThemeToggle />
                   </div>
                   <div className="border-t border-pool-border py-1">
                     <button
