@@ -82,8 +82,8 @@ function TheTwoWayShot() {
       {/* path B: if it misses, cue ball tucks safe near a rail */}
       <path d="M 200 75 Q 175 110 120 122" fill="none" stroke={CHALK} strokeWidth="1.2" strokeDasharray="2 2" opacity="0.6" />
       <Ball cx={120} cy={122} r={6} color={CHALK} />
-      <Label x={135} y={134} size={7} opacity={0.6}>miss</Label>
-      <Label x={170} y={147} size={7} opacity={0.7}>a good shot either way</Label>
+      <Label x={120} y={108} size={6} opacity={0.6}>miss</Label>
+      <Label x={150} y={138} size={7} opacity={0.7}>a good shot either way</Label>
     </g>
   )
 }

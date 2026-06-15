@@ -27,7 +27,7 @@ export default function TipImage({ tip }: { tip: TipArticle }) {
   if (!Illustration) return null
 
   return (
-    <div className="rounded-xl overflow-hidden border border-pool-border" style={{ background: '#0d2010' }}>
+    <div className="h-full rounded-xl overflow-hidden border border-pool-border" style={{ background: '#0d2010' }}>
       <svg viewBox="0 0 300 150" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
         <Illustration />
       </svg>

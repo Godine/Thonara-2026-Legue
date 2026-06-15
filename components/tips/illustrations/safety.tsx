@@ -102,7 +102,7 @@ function TwoWayShotsRevisited() {
         <Ball cx={130} cy={118} r={6} color={CHALK} />
       </g>
       <Ball cx={108} cy={128} r={6} color="#ef4444" />
-      <Label x={170} y={147} size={7} opacity={0.7}>good shot either way</Label>
+      <Label x={150} y={138} size={7} opacity={0.7}>good shot either way</Label>
     </g>
   )
 }
