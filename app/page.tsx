@@ -12,6 +12,7 @@ import Link from 'next/link'
 import PlayerAvatar from '@/components/PlayerAvatar'
 import PullToRefresh from '@/components/PullToRefresh'
 import FlipBadgeCard from '@/components/FlipBadgeCard'
+import SeasonCountdown from '@/components/SeasonCountdown'
 import { PLAYERS, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 
 const RANK_BADGES = ['🥇', '🥈', '🥉']
@@ -152,6 +153,22 @@ async function StandingsStream() {
         )}
       </section>
     </>
+  )
+}
+
+async function SeasonCountdownStream() {
+  const db = createClient()
+  const [standings, games] = await Promise.all([fetchStandings(db), fetchCompletedGames(db)])
+  const sorted = [...standings].sort((a, b) => b.wins - a.wins)
+  const leader = sorted[0]
+  const champion = leader
+    ? { username: leader.username as PlayerUsername, displayName: leader.display_name, wins: leader.wins }
+    : null
+
+  return (
+    <section className="px-4 pb-5">
+      <SeasonCountdown played={games.length} champion={champion} />
+    </section>
   )
 }
 
@@ -404,6 +421,21 @@ function StandingsSkeleton() {
   )
 }
 
+function SeasonCountdownSkeleton() {
+  return (
+    <section className="px-4 pb-5">
+      <div className="rounded-2xl border border-pool-border bg-pool-surface p-4 animate-pulse">
+        <div className="flex items-center justify-between mb-2">
+          <div className="h-3 bg-pool-border rounded w-24" />
+          <div className="h-3 bg-pool-border rounded w-14" />
+        </div>
+        <div className="h-2.5 rounded-full bg-pool-border" />
+        <div className="h-2.5 bg-pool-border rounded w-2/3 mx-auto mt-2.5" />
+      </div>
+    </section>
+  )
+}
+
 function FireStreaksSkeleton() {
   return (
     <section className="px-4 pb-5">
@@ -546,6 +578,11 @@ export default function Dashboard() {
       {/* ── NARRATIVE + STANDINGS (streams in) ───────────────────────── */}
       <Suspense fallback={<StandingsSkeleton />}>
         <StandingsStream />
+      </Suspense>
+
+      {/* ── SEASON COUNTDOWN (streams in) ────────────────────────────── */}
+      <Suspense fallback={<SeasonCountdownSkeleton />}>
+        <SeasonCountdownStream />
       </Suspense>
 
       {/* ── WIN STREAKS / FIRE TRACKER (streams in) ──────────────────── */}

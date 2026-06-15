@@ -5,11 +5,13 @@ import { fetchAllSessions } from '@/lib/queries'
 import Link from 'next/link'
 import PullToRefresh from '@/components/PullToRefresh'
 import PlayerAvatar from '@/components/PlayerAvatar'
+import SeasonCountdown from '@/components/SeasonCountdown'
 import { format } from 'date-fns'
 import { PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import type { Player } from '@/types/database'
 import type { SessionFull } from '@/lib/queries/sessions'
 import { computeSessionStakes, computeCueRace, STAKES_DH, type SessionStake } from '@/lib/challenges'
+import { computeSeasonProgress } from '@/lib/season'
 
 const RANK_BADGES = ['🥇', '🥈', '🥉']
 const RANK_LABELS = ['Eats free', 'Pays the table', 'Buys the meal']
@@ -35,6 +37,12 @@ export default async function ChallengesPage() {
   const cueRace = computeCueRace(sessions, currentYear, allPlayers)
   const leaderWins = cueRace[0]?.wins ?? 0
 
+  const totalGamesPlayed = sessions.flatMap(s => s.games).filter(g => g.is_complete).length
+  const seasonProgress = computeSeasonProgress(totalGamesPlayed)
+  const champion = seasonProgress.isComplete && cueRace[0]
+    ? { username: cueRace[0].player.username as PlayerUsername, displayName: cueRace[0].player.display_name, wins: cueRace[0].wins }
+    : null
+
   return (
     <div className="max-w-lg mx-auto px-4 py-6 animate-fade-in">
       <PullToRefresh />
@@ -52,6 +60,9 @@ export default async function ChallengesPage() {
       {/* ── Race for the Cue ─────────────────────────────────────────── */}
       <section className="mb-8">
         <SectionHeader title="RACE FOR THE CUE" />
+        <div className="mt-3">
+          <SeasonCountdown played={totalGamesPlayed} champion={champion} />
+        </div>
         <div className="bg-pool-surface rounded-2xl border border-pool-border overflow-hidden mt-3">
           <div className="flex items-start gap-2.5 px-4 pt-3 pb-3">
             <span className="text-lg shrink-0">🎯</span>
