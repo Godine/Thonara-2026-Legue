@@ -20,6 +20,7 @@ const NAV_LINKS = [
   { href: '/history',      label: 'History',    icon: '📅' },
   { href: '/challenges',   label: 'Challenges', icon: '💰' },
   { href: '/practice',     label: 'Practice',   icon: '🎱' },
+  { href: '/tips',         label: 'Top Tips',   icon: '🎓' },
 ]
 
 export default function Navbar() {
