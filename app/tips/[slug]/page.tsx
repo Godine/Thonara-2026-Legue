@@ -6,7 +6,7 @@ import {
   TIP_LEVEL_STYLES,
   getTipBySlug,
 } from '@/lib/tips-content'
-import TipDiagram from '@/components/tips/TipDiagram'
+import TipImage from '@/components/tips/TipImage'
 
 export function generateStaticParams() {
   return TIP_ARTICLES.map(t => ({ slug: t.slug }))
@@ -46,12 +46,10 @@ export default function TipArticlePage({ params }: { params: { slug: string } })
         <h1 className="font-heading text-3xl tracking-wide text-pool-chalk leading-tight">{tip.title}</h1>
       </div>
 
-      {/* Diagram */}
-      {tip.diagram && (
-        <div className="mb-5" style={{ height: 160 }}>
-          <TipDiagram type={tip.diagram} />
-        </div>
-      )}
+      {/* Diagram / illustration */}
+      <div className="mb-5" style={{ height: 160 }}>
+        <TipImage tip={tip} />
+      </div>
 
       {/* Body */}
       <div className="space-y-4">

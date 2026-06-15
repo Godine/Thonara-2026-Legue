@@ -1,29 +1,5 @@
 import type { DiagramKey } from '@/lib/tips-content'
-
-const CHALK = '#f0ede6'
-const GOLD = '#c9a227'
-
-const POCKETS = [
-  { x: 15, y: 12, r: 8.5 },
-  { x: 285, y: 12, r: 8.5 },
-  { x: 15, y: 138, r: 8.5 },
-  { x: 285, y: 138, r: 8.5 },
-  { x: 150, y: 11, r: 7.5 },
-  { x: 150, y: 139, r: 7.5 },
-]
-
-function Felt({ pockets = true }: { pockets?: boolean }) {
-  return (
-    <>
-      <rect x="0" y="0" width="300" height="150" rx="10" fill="#0d2010" />
-      <rect x="15" y="12" width="270" height="126" fill="#1a4731" />
-      <line x1="150" y1="12" x2="150" y2="138" stroke="#246340" strokeWidth="0.5" />
-      {pockets && POCKETS.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r={p.r} fill="#050d07" />
-      ))}
-    </>
-  )
-}
+import { Felt, CHALK, GOLD } from './sceneParts'
 
 function GhostBall() {
   return (
