@@ -47,9 +47,6 @@ export default function TipArticlePage({ params }: { params: { slug: string } })
         <h1 className="font-heading text-3xl tracking-wide text-pool-chalk leading-tight">{tip.title}</h1>
       </div>
 
-      {/* Completion tracking */}
-      <ArticleCompletion slug={tip.slug} category={tip.category} />
-
       {/* Diagram / illustration */}
       <div className="mb-5" style={{ height: 160 }}>
         <TipImage tip={tip} />
@@ -66,6 +63,11 @@ export default function TipArticlePage({ params }: { params: { slug: string } })
       <div className="mt-6 rounded-2xl border p-4" style={{ borderColor: `${cat.color}40`, background: `${cat.color}10` }}>
         <p className="font-heading text-xs tracking-widest mb-1" style={{ color: cat.color }}>KEY TAKEAWAY</p>
         <p className="font-body text-sm text-pool-chalk leading-relaxed">{tip.takeaway}</p>
+      </div>
+
+      {/* Completion tracking */}
+      <div className="mt-6">
+        <ArticleCompletion slug={tip.slug} category={tip.category} />
       </div>
 
       {/* Prev / Next */}
