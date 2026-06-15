@@ -7,6 +7,7 @@ import {
   getTipBySlug,
 } from '@/lib/tips-content'
 import TipImage from '@/components/tips/TipImage'
+import ArticleCompletion from '@/components/tips/ArticleCompletion'
 
 export function generateStaticParams() {
   return TIP_ARTICLES.map(t => ({ slug: t.slug }))
@@ -45,6 +46,9 @@ export default function TipArticlePage({ params }: { params: { slug: string } })
         </div>
         <h1 className="font-heading text-3xl tracking-wide text-pool-chalk leading-tight">{tip.title}</h1>
       </div>
+
+      {/* Completion tracking */}
+      <ArticleCompletion slug={tip.slug} category={tip.category} />
 
       {/* Diagram / illustration */}
       <div className="mb-5" style={{ height: 160 }}>

@@ -74,3 +74,19 @@ export interface PlayerGameStats {
   bankPct: number
   errorPct: number
 }
+
+export interface TipCompletion {
+  id: string
+  username: string
+  slug: string
+  completed_at: string
+}
+
+export interface QuizScore {
+  id: string
+  username: string
+  quiz_key: string
+  score: number
+  total: number
+  completed_at: string
+}

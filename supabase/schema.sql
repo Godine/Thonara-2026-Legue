@@ -146,11 +146,44 @@ LEFT JOIN public.games g
 GROUP BY p.id, p.username, p.display_name, p.ball_number, p.color;
 
 
+-- ── TOP TIPS: ARTICLE COMPLETIONS ────────────────────────────
+-- Tracks which player has marked which tip article as read.
+CREATE TABLE IF NOT EXISTS public.tip_completions (
+  id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  username     TEXT        NOT NULL REFERENCES public.players(username) ON DELETE CASCADE,
+  slug         TEXT        NOT NULL,
+  completed_at TIMESTAMPTZ DEFAULT NOW(),
+
+  UNIQUE (username, slug)
+);
+
+ALTER TABLE public.tip_completions DISABLE ROW LEVEL SECURITY;
+
+
+-- ── TOP TIPS: QUIZ SCORES ─────────────────────────────────────
+-- One row per player per quiz (quiz_key is a tip category, or 'final'
+-- for the all-categories exam). Retaking a quiz overwrites the score.
+CREATE TABLE IF NOT EXISTS public.quiz_scores (
+  id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  username     TEXT        NOT NULL REFERENCES public.players(username) ON DELETE CASCADE,
+  quiz_key     TEXT        NOT NULL,
+  score        INTEGER     NOT NULL,
+  total        INTEGER     NOT NULL,
+  completed_at TIMESTAMPTZ DEFAULT NOW(),
+
+  UNIQUE (username, quiz_key)
+);
+
+ALTER TABLE public.quiz_scores DISABLE ROW LEVEL SECURITY;
+
+
 -- ── ENABLE REALTIME ──────────────────────────────────────────
 -- Run in Supabase Dashboard → Database → Replication, or via SQL:
 ALTER PUBLICATION supabase_realtime ADD TABLE public.shots;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.games;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.sessions;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.tip_completions;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.quiz_scores;
 
 
 -- ── SEED: Create the 3 player accounts ───────────────────────

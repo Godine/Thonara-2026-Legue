@@ -9,13 +9,23 @@ import {
   TIP_LEVEL_STYLES,
   type TipCategory,
 } from '@/lib/tips-content'
+import { useTipsProgress } from '@/components/tips/TipsProgressContext'
+import ReadAvatars from '@/components/tips/ReadAvatars'
 
 export default function TipsPage() {
   const [active, setActive] = useState<TipCategory | 'all'>('all')
+  const { loading, currentUser, completedBy, isCompletedByMe } = useTipsProgress()
 
   const articles = active === 'all'
     ? TIP_ARTICLES
     : TIP_ARTICLES.filter(t => t.category === active)
+
+  const doneCount = currentUser ? articles.filter(t => isCompletedByMe(t.slug)).length : 0
+  const allDone = !loading && !!currentUser && doneCount === articles.length
+  const progressColor = active === 'all' ? '#c9a227' : TIP_CATEGORIES[active].color
+  const progressLabel = active === 'all' ? 'Your progress' : `${TIP_CATEGORIES[active].label} progress`
+  const quizHref = active === 'all' ? '/tips/quiz/final' : `/tips/quiz/${active}`
+  const quizCta = active === 'all' ? '🏆 Take the Final Exam' : `🎓 Take the ${TIP_CATEGORIES[active].label} quiz`
 
   return (
     <div className="max-w-lg mx-auto pb-16 animate-fade-in">
@@ -75,6 +85,33 @@ export default function TipsPage() {
         </div>
       </section>
 
+      {/* ── PROGRESS ─────────────────────────────────────────────────── */}
+      {!loading && currentUser && (
+        <section className="px-4 pb-4 flex flex-col gap-2">
+          <div className="bg-pool-surface rounded-2xl border border-pool-border p-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-body text-xs text-pool-chalk-dim">{progressLabel}</p>
+              <p className="font-heading text-sm text-pool-chalk">{doneCount} / {articles.length}</p>
+            </div>
+            <div className="h-1.5 rounded-full bg-pool-border overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${articles.length ? (doneCount / articles.length) * 100 : 0}%`, background: progressColor }}
+              />
+            </div>
+          </div>
+          {allDone && (
+            <Link
+              href={quizHref}
+              className="card-hover flex items-center justify-center rounded-2xl border p-3 font-heading text-sm tracking-widest uppercase active:scale-[0.99]"
+              style={{ borderColor: `${progressColor}40`, background: `${progressColor}10`, color: progressColor }}
+            >
+              {quizCta}
+            </Link>
+          )}
+        </section>
+      )}
+
       {/* ── ARTICLE LIST ─────────────────────────────────────────────── */}
       <section className="px-4 space-y-2">
         {articles.map(tip => {
@@ -103,9 +140,12 @@ export default function TipsPage() {
                 <p className="font-body text-xs text-pool-chalk-dim mt-1 leading-relaxed">
                   {tip.summary}
                 </p>
-                <p className="font-body text-[10px] text-pool-chalk-dim mt-2">
-                  {tip.readMin} min read
-                </p>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="font-body text-[10px] text-pool-chalk-dim">
+                    {tip.readMin} min read
+                  </p>
+                  <ReadAvatars usernames={completedBy(tip.slug)} />
+                </div>
               </div>
               <span className="text-pool-chalk-dim text-lg shrink-0 mt-1">›</span>
             </Link>
