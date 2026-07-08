@@ -4,7 +4,7 @@ import { format, parseISO } from 'date-fns'
 import { PLAYER_STYLES, PLAYERS, type PlayerUsername } from '@/lib/game-config'
 import PlayerBall from '@/components/PlayerBall'
 import PlayerAvatar from '@/components/PlayerAvatar'
-import { pct, formatTime, longestStreak } from '@/lib/stats'
+import { pct, formatTime, longestStreak, buildFirstShotMap, sortGamesByPlayOrder } from '@/lib/stats'
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -57,13 +57,10 @@ const COLORS: Record<PlayerUsername, string> = {
 }
 
 export default function StatsClient({ games: _games, shots }: { games: RawGame[]; shots: RawShot[] }) {
-  // Sort chronologically — all 6 games in a session share the same created_at,
-  // so ordering by that field leaves intra-session order undefined and breaks streaks.
-  const games = [..._games].sort((a, b) => {
-    const da = a.session?.date ?? ''
-    const db = b.session?.date ?? ''
-    return da !== db ? da.localeCompare(db) : a.game_number - b.game_number
-  })
+  // Sort by actual play order: session date first, then by first-shot timestamp
+  // within a session (game_number only reflects the schedule, not play order).
+  const firstShotAt = buildFirstShotMap(shots)
+  const games = sortGamesByPlayOrder(_games, firstShotAt)
 
   // ── Compute player stats ────────────────────────────────────────────────
 

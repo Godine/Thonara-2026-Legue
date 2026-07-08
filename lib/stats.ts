@@ -41,3 +41,36 @@ export function formatTime(seconds: number): string {
   const s = seconds % 60
   return `${m}:${s.toString().padStart(2, '0')}`
 }
+
+/** Returns a map of game_id → earliest shot created_at.
+ *  Used to sort games by actual play order within a session, since all 6 games
+ *  are inserted at the same moment when the session is created. */
+export function buildFirstShotMap(shots: { game_id: string; created_at: string }[]): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const s of shots) {
+    if (!map[s.game_id] || s.created_at < map[s.game_id]) {
+      map[s.game_id] = s.created_at
+    }
+  }
+  return map
+}
+
+/** Sorts games chronologically: by session date first, then by when the first
+ *  shot was recorded (actual play order). Falls back to game_number only when
+ *  a game has no shots (shouldn't happen in practice). */
+export function sortGamesByPlayOrder<T extends {
+  id: string
+  game_number: number
+  session?: { date: string } | null
+}>(games: T[], firstShotAt: Record<string, string>): T[] {
+  return [...games].sort((a, b) => {
+    const da = a.session?.date ?? ''
+    const db = b.session?.date ?? ''
+    if (da !== db) return da.localeCompare(db)
+    const ta = firstShotAt[a.id]
+    const tb = firstShotAt[b.id]
+    if (ta && tb) return ta.localeCompare(tb)
+    return a.game_number - b.game_number
+  })
+}
+

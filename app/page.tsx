@@ -14,6 +14,7 @@ import PullToRefresh from '@/components/PullToRefresh'
 import FlipBadgeCard from '@/components/FlipBadgeCard'
 import SeasonCountdown from '@/components/SeasonCountdown'
 import { PLAYERS, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
+import { buildFirstShotMap, sortGamesByPlayOrder } from '@/lib/stats'
 
 const RANK_BADGES = ['🥇', '🥈', '🥉']
 
@@ -174,14 +175,11 @@ async function SeasonCountdownStream() {
 
 async function FireStreaksStream() {
   const db = createClient()
-  const games = await fetchCompletedGames(db)
+  const [games, shots] = await Promise.all([fetchCompletedGames(db), fetchAllShots(db)])
 
-  // Sort chronologically — all games in a session share the same created_at,
-  // so ordering by game_number within a session keeps streaks accurate.
-  const sorted = [...games].sort((a, b) => {
-    const da = a.session?.date ?? '', dbDate = b.session?.date ?? ''
-    return da !== dbDate ? da.localeCompare(dbDate) : a.game_number - b.game_number
-  })
+  // Sort by actual play order: session date first, then by first-shot timestamp
+  // within a session (game_number only reflects the schedule, not play order).
+  const sorted = sortGamesByPlayOrder(games, buildFirstShotMap(shots))
 
   const playerIdMap: Partial<Record<PlayerUsername, string>> = {}
   for (const g of sorted) {

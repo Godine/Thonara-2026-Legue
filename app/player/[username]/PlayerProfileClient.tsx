@@ -6,7 +6,7 @@ import { format, parseISO } from 'date-fns'
 import { PLAYER_STYLES, PLAYERS, type PlayerUsername } from '@/lib/game-config'
 import PlayerAvatar from '@/components/PlayerAvatar'
 import PullToRefresh from '@/components/PullToRefresh'
-import { pct, longestStreak } from '@/lib/stats'
+import { pct, longestStreak, buildFirstShotMap, sortGamesByPlayOrder } from '@/lib/stats'
 import { ACHIEVEMENTS, RARITY_STYLES, RARITY_ORDER, computePlayerAchievements } from '@/lib/achievements'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -47,12 +47,8 @@ export default function PlayerProfileClient({ username, games: _games, shots }: 
   const style = PLAYER_STYLES[username]
   const [flippedBadge, setFlippedBadge] = useState<string | null>(null)
 
-  // Sort chronologically
-  const games = [..._games].sort((a, b) => {
-    const da = a.session?.date ?? ''
-    const db = b.session?.date ?? ''
-    return da !== db ? da.localeCompare(db) : a.game_number - b.game_number
-  })
+  const firstShotAt = buildFirstShotMap(shots)
+  const games = sortGamesByPlayOrder(_games, firstShotAt)
 
   // ID maps
   const usernameToId: Partial<Record<PlayerUsername, string>> = {}
