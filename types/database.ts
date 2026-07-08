@@ -43,6 +43,7 @@ export interface Shot {
   ball_color: string | null
   is_lucky: boolean
   is_error: boolean
+  cue_ball_potted?: boolean
   shot_number: number
   created_at: string
 }

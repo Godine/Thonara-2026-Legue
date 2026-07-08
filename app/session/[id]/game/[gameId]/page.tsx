@@ -73,7 +73,7 @@ export default function GamePage() {
   const [colorAssignment, setColorAssignment] = useState<Record<string, 'yellow' | 'red'> | null>(null)
   const [pendingCount, setPendingCount] = useState(0)
   const [manualActivePlayer, setManualActivePlayer] = useState<string | null>(null)
-  const [inoffPopup, setInoffPopup]     = useState<{ playerId: string; ownBalls: number } | null>(null)
+  const [inoffPopup, setInoffPopup]     = useState<{ playerId: string; ownBalls: number; oppBalls: number; cueBallIn: boolean } | null>(null)
   const [milestoneToasts, setMilestoneToasts] = useState<MilestoneToast[]>([])
   const prevCompleteRef   = useRef<boolean | undefined>(undefined)
   const timerStartRef     = useRef<number | null>(null)
@@ -339,7 +339,7 @@ export default function GamePage() {
     setSaving(false)
   }
 
-  const recordInoff = async (playerId: string, ownBalls: number) => {
+  const recordFoul = async (playerId: string, ownBalls: number, oppBalls: number, cueBallIn: boolean) => {
     if (!canEdit || saving) return
     setInoffPopup(null)
     setSaving(true)
@@ -351,12 +351,13 @@ export default function GamePage() {
       id: `temp-${Date.now()}`,
       game_id: gameId,
       player_id: playerId,
-      potted: true,
+      potted: ownBalls > 0,
       balls_potted: ownBalls,
-      opponent_balls_potted: 0,
-      ball_color: colorAssignment ? (colorAssignment[playerId] ?? null) : null,
+      opponent_balls_potted: oppBalls,
+      ball_color: (ownBalls > 0 && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
       is_lucky: false,
       is_error: true,
+      cue_ball_potted: cueBallIn,
       shot_number: newShotNumber,
       created_at: new Date().toISOString(),
     }
@@ -365,12 +366,13 @@ export default function GamePage() {
     const shotData: Parameters<typeof insertShot>[1] = {
       game_id: gameId,
       player_id: playerId,
-      potted: true,
+      potted: ownBalls > 0,
       balls_potted: ownBalls,
-      opponent_balls_potted: 0,
-      ball_color: colorAssignment ? (colorAssignment[playerId] ?? null) : null,
+      opponent_balls_potted: oppBalls,
+      ball_color: (ownBalls > 0 && colorAssignment) ? (colorAssignment[playerId] ?? null) : null,
       is_lucky: false,
       is_error: true,
+      cue_ball_potted: cueBallIn,
       shot_number: newShotNumber,
     }
     try {
@@ -415,7 +417,7 @@ export default function GamePage() {
     longPressErrTimer.current = setTimeout(() => {
       longPressErrTriggered.current = true
       haptic([10, 5, 20])
-      setInoffPopup({ playerId, ownBalls: 1 })
+      setInoffPopup({ playerId, ownBalls: 0, oppBalls: 0, cueBallIn: false })
     }, 400)
   }
 
@@ -1055,7 +1057,7 @@ export default function GamePage() {
                 >
                   <span className="text-2xl leading-none">⚠</span>
                   <span>ERR</span>
-                  <span className="text-[9px] text-pool-chalk-dim/50 font-body normal-case tracking-normal leading-none mt-0.5">hold: in-off</span>
+                  <span className="text-[9px] text-pool-chalk-dim/50 font-body normal-case tracking-normal leading-none mt-0.5">hold: foul +</span>
                 </button>
               </div>
 
@@ -1129,13 +1131,22 @@ export default function GamePage() {
               const shooterStyle = shot.player_id === p1.id ? p1Style : p2Style
               const shotBalls = shot.balls_potted ?? (shot.potted ? 1 : 0)
               const oppBalls = shot.opponent_balls_potted ?? 0
+              const cueBallIn = shot.cue_ball_potted ?? false
               const label = shot.is_error
-                ? oppBalls > 0 ? `⚠ Foul +${oppBalls}` : shotBalls > 0 ? `⚠ In-off` : '⚠ Error'
+                ? cueBallIn
+                  ? oppBalls > 0
+                    ? `⚪ Scratch +${oppBalls} opp`
+                    : shotBalls > 0 ? `⚪ Scratch +${shotBalls}` : '⚪ Scratch'
+                  : oppBalls > 0 ? `⚠ Opp ×${oppBalls}`
+                  : shotBalls > 0 ? `⚠ In-off ×${shotBalls}`
+                  : '⚠ Error'
                 : shot.is_lucky ? '★ Lucky'
                 : shotBalls > 1 ? `● ×${shotBalls}`
                 : shotBalls === 1 ? '● Potted'
                 : '✕ Miss'
-              const color = shot.is_error ? '#ef4444' : shot.is_lucky ? '#c9a227' : shotBalls > 0 ? '#22c55e' : '#7a786f'
+              const color = shot.is_error
+                ? cueBallIn ? '#a78bfa' : oppBalls > 0 ? '#f97316' : '#ef4444'
+                : shot.is_lucky ? '#c9a227' : shotBalls > 0 ? '#22c55e' : '#7a786f'
               return (
                 <div key={shot.id} className={`flex items-center gap-3 px-4 py-2.5 ${i === 0 ? 'bg-pool-border/20' : ''}`}>
                   <span className="font-body text-xs text-pool-chalk-dim/50 w-5 shrink-0 tabular-nums">#{shot.shot_number}</span>
@@ -1149,7 +1160,7 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* In-off popup */}
+      {/* Foul popup */}
       {inoffPopup && (
         <div
           className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in"
@@ -1159,21 +1170,40 @@ export default function GamePage() {
             className="w-full max-w-lg bg-pool-surface rounded-t-3xl border-t border-pool-border p-6 animate-slide-up"
             onClick={e => e.stopPropagation()}
           >
-            <h2 className="font-heading text-2xl tracking-wider text-pool-chalk text-center mb-1">IN-OFF</h2>
-            <p className="font-body text-xs text-pool-chalk-dim text-center mb-6">
-              Own ball(s) potted + cue ball — foul, turn switches
+            <h2 className="font-heading text-2xl tracking-wider text-pool-chalk text-center mb-1">FOUL</h2>
+            <p className="font-body text-xs text-pool-chalk-dim text-center mb-5">
+              Turn switches. Mark what happened.
             </p>
 
-            <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-2">Own balls potted</p>
-            <div className="flex gap-3 mb-6">
+            {/* Cue ball toggle */}
+            <button
+              onClick={() => setInoffPopup(p => p ? { ...p, cueBallIn: !p.cueBallIn } : p)}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 mb-4 transition-all active:scale-[0.98] ${
+                inoffPopup.cueBallIn
+                  ? 'border-violet-400 bg-violet-400/15 text-violet-300'
+                  : 'border-pool-border text-pool-chalk-dim hover:border-violet-400/40'
+              }`}
+            >
+              <span className="text-xl leading-none">⚪</span>
+              <span className="font-heading text-base tracking-wider flex-1 text-left">CUE BALL POTTED</span>
+              <span className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${
+                inoffPopup.cueBallIn ? 'bg-violet-400 border-violet-400' : 'border-pool-chalk-dim'
+              }`}>
+                {inoffPopup.cueBallIn && <span className="text-pool-bg text-xs font-bold">✓</span>}
+              </span>
+            </button>
+
+            {/* Opponent balls */}
+            <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-2">Opponent balls potted</p>
+            <div className="flex gap-3 mb-4">
               {[0, 1, 2, 3].map(n => (
                 <button
                   key={n}
-                  onClick={() => setInoffPopup(p => p ? { ...p, ownBalls: n } : p)}
-                  className={`flex-1 py-4 rounded-xl border-2 font-heading text-2xl transition-all active:scale-95 ${
-                    inoffPopup.ownBalls === n
-                      ? 'border-amber-500 bg-amber-500/20 text-amber-400'
-                      : 'border-pool-border text-pool-chalk-dim hover:border-amber-500/40'
+                  onClick={() => setInoffPopup(p => p ? { ...p, oppBalls: n } : p)}
+                  className={`flex-1 py-3.5 rounded-xl border-2 font-heading text-2xl transition-all active:scale-95 ${
+                    inoffPopup.oppBalls === n
+                      ? 'border-orange-500 bg-orange-500/20 text-orange-400'
+                      : 'border-pool-border text-pool-chalk-dim hover:border-orange-500/40'
                   }`}
                 >
                   {n}
@@ -1181,7 +1211,29 @@ export default function GamePage() {
               ))}
             </div>
 
-            <div className="flex gap-3">
+            {/* Own balls (only relevant for in-off / scratch) */}
+            {inoffPopup.cueBallIn && (
+              <>
+                <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-2">Own balls also potted</p>
+                <div className="flex gap-3 mb-4">
+                  {[0, 1, 2, 3].map(n => (
+                    <button
+                      key={n}
+                      onClick={() => setInoffPopup(p => p ? { ...p, ownBalls: n } : p)}
+                      className={`flex-1 py-3.5 rounded-xl border-2 font-heading text-2xl transition-all active:scale-95 ${
+                        inoffPopup.ownBalls === n
+                          ? 'border-violet-400 bg-violet-400/20 text-violet-300'
+                          : 'border-pool-border text-pool-chalk-dim hover:border-violet-400/40'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-3 mt-2">
               <button
                 onClick={() => setInoffPopup(null)}
                 className="flex-1 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-wider text-pool-chalk-dim hover:text-pool-chalk transition-all"
@@ -1189,8 +1241,8 @@ export default function GamePage() {
                 CANCEL
               </button>
               <button
-                onClick={() => recordInoff(inoffPopup.playerId, inoffPopup.ownBalls)}
-                className="flex-1 py-4 rounded-xl bg-amber-500 text-pool-bg font-heading text-lg tracking-widest hover:brightness-110 transition-all active:scale-[0.98]"
+                onClick={() => recordFoul(inoffPopup.playerId, inoffPopup.ownBalls, inoffPopup.oppBalls, inoffPopup.cueBallIn)}
+                className="flex-1 py-4 rounded-xl bg-pool-red text-pool-chalk font-heading text-lg tracking-widest hover:brightness-110 transition-all active:scale-[0.98]"
               >
                 CONFIRM
               </button>

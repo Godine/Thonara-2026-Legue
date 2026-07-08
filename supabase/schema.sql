@@ -97,11 +97,12 @@ CREATE TABLE IF NOT EXISTS public.shots (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   game_id     UUID        NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
   player_id   UUID        NOT NULL REFERENCES public.players(id),
-  potted      BOOLEAN     NOT NULL DEFAULT FALSE,
-  is_lucky    BOOLEAN     NOT NULL DEFAULT FALSE,
-  is_error    BOOLEAN     NOT NULL DEFAULT FALSE,
-  shot_number INTEGER     NOT NULL,
-  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  potted           BOOLEAN     NOT NULL DEFAULT FALSE,
+  is_lucky         BOOLEAN     NOT NULL DEFAULT FALSE,
+  is_error         BOOLEAN     NOT NULL DEFAULT FALSE,
+  cue_ball_potted  BOOLEAN     NOT NULL DEFAULT FALSE,
+  shot_number      INTEGER     NOT NULL,
+  created_at       TIMESTAMPTZ DEFAULT NOW(),
 
   -- Lucky implies potted
   CHECK (NOT is_lucky OR potted)
