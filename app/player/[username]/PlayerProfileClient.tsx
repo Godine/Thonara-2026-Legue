@@ -368,7 +368,7 @@ export default function PlayerProfileClient({ username, games: _games, shots }: 
             <ResponsiveContainer width="100%" height={140}>
               <LineChart data={accuracyTrend} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
                 <XAxis dataKey="label" tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} unit="%" domain={[0, 100]} />
+                <YAxis tick={{ fill: '#7a786f', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} unit="%" domain={[25, 75]} />
                 <Tooltip {...chartTooltipStyle} itemStyle={{ color: style.color }}
                   formatter={(v: number) => [`${v}%`, 'Accuracy']} />
                 <Line type="monotone" dataKey="acc" name="Accuracy"

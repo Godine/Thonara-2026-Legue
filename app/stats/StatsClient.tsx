@@ -572,7 +572,7 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
             <ResponsiveContainer width="100%" height={160}>
               <LineChart data={accuracyTrend} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
                 <XAxis dataKey="label" tick={chartAxisProps} axisLine={false} tickLine={false} />
-                <YAxis tick={chartAxisProps} axisLine={false} tickLine={false} unit="%" domain={[0, 100]} />
+                <YAxis tick={chartAxisProps} axisLine={false} tickLine={false} unit="%" domain={[25, 75]} />
                 <Tooltip {...chartTooltipStyle} formatter={(v: number) => [`${v}%`]} />
                 {PLAYERS.map(u => (
                   <Line key={u} type="monotone" dataKey={u} name={PLAYER_STYLES[u].label}
