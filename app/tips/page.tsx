@@ -10,22 +10,33 @@ import {
   type TipCategory,
 } from '@/lib/tips-content'
 import { useTipsProgress } from '@/components/tips/TipsProgressContext'
+import { useLang, LangToggle } from '@/components/tips/LanguageContext'
 import ReadAvatars from '@/components/tips/ReadAvatars'
 
 export default function TipsPage() {
   const [active, setActive] = useState<TipCategory | 'all'>('all')
   const { loading, currentUser, completedBy, isCompletedByMe } = useTipsProgress()
+  const { lang } = useLang()
 
   const articles = active === 'all'
     ? TIP_ARTICLES
     : TIP_ARTICLES.filter(t => t.category === active)
 
-  const doneCount = currentUser ? articles.filter(t => isCompletedByMe(t.slug)).length : 0
-  const allDone = !loading && !!currentUser && doneCount === articles.length
+  const doneCount   = currentUser ? articles.filter(t => isCompletedByMe(t.slug)).length : 0
+  const allDone     = !loading && !!currentUser && doneCount === articles.length
   const progressColor = active === 'all' ? '#c9a227' : TIP_CATEGORIES[active].color
-  const progressLabel = active === 'all' ? 'Your progress' : `${TIP_CATEGORIES[active].label} progress`
-  const quizHref = active === 'all' ? '/tips/quiz/final' : `/tips/quiz/${active}`
-  const quizCta = active === 'all' ? '🏆 Take the Final Exam' : `🎓 Take the ${TIP_CATEGORIES[active].label} quiz`
+  const quizHref    = active === 'all' ? '/tips/quiz/final' : `/tips/quiz/${active}`
+  const quizCta     = active === 'all'
+    ? (lang === 'fr' ? '🏆 Passer l\'Examen Final' : '🏆 Take the Final Exam')
+    : (lang === 'fr'
+        ? `🎓 Quiz ${TIP_CATEGORIES[active].labelFr ?? TIP_CATEGORIES[active].label}`
+        : `🎓 Take the ${TIP_CATEGORIES[active].label} quiz`)
+
+  const progressLabel = active === 'all'
+    ? (lang === 'fr' ? 'Votre progression' : 'Your progress')
+    : (lang === 'fr'
+        ? `Progression — ${TIP_CATEGORIES[active].labelFr ?? TIP_CATEGORIES[active].label}`
+        : `${TIP_CATEGORIES[active].label} progress`)
 
   return (
     <div className="max-w-lg mx-auto pb-16 animate-fade-in">
@@ -39,12 +50,12 @@ export default function TipsPage() {
         <p className="font-body text-xs tracking-[0.35em] uppercase text-pool-chalk-dim relative">Thonara League</p>
         <h1 className="font-heading text-[3.5rem] leading-none tracking-widest text-pool-chalk relative mt-1">TOP TIPS</h1>
         <p className="font-body text-sm text-pool-chalk-dim mt-2 relative">
-          {TIP_ARTICLES.length} coaching articles — technique, strategy & the mental game
+          {TIP_ARTICLES.length} {lang === 'fr' ? 'articles de coaching — technique, stratégie & mental' : 'coaching articles — technique, strategy & the mental game'}
         </p>
 
-        <div className="relative my-5 flex items-center gap-3">
+        <div className="relative my-4 flex items-center gap-3">
           <div className="flex-1 h-px bg-gradient-to-r from-transparent to-pool-gold/30" />
-          <span className="text-xl">🎓</span>
+          <LangToggle />
           <div className="flex-1 h-px bg-gradient-to-l from-transparent to-pool-gold/30" />
         </div>
       </div>
@@ -61,12 +72,13 @@ export default function TipsPage() {
               color:       active === 'all' ? '#c9a227' : 'rgb(var(--pool-chalk-dim))',
             }}
           >
-            All ({TIP_ARTICLES.length})
+            {lang === 'fr' ? 'Tous' : 'All'} ({TIP_ARTICLES.length})
           </button>
           {TIP_CATEGORY_ORDER.map(cat => {
-            const info = TIP_CATEGORIES[cat]
-            const count = TIP_ARTICLES.filter(t => t.category === cat).length
+            const info    = TIP_CATEGORIES[cat]
+            const count   = TIP_ARTICLES.filter(t => t.category === cat).length
             const isActive = active === cat
+            const label   = lang === 'fr' && info.labelFr ? info.labelFr : info.label
             return (
               <button
                 key={cat}
@@ -78,7 +90,7 @@ export default function TipsPage() {
                   color:       isActive ? info.color : 'rgb(var(--pool-chalk-dim))',
                 }}
               >
-                <span>{info.icon}</span> {info.label} ({count})
+                <span>{info.icon}</span> {label} ({count})
               </button>
             )
           })}
@@ -115,8 +127,12 @@ export default function TipsPage() {
       {/* ── ARTICLE LIST ─────────────────────────────────────────────── */}
       <section className="px-4 space-y-2">
         {articles.map(tip => {
-          const cat = TIP_CATEGORIES[tip.category]
-          const level = TIP_LEVEL_STYLES[tip.level]
+          const cat    = TIP_CATEGORIES[tip.category]
+          const level  = TIP_LEVEL_STYLES[tip.level]
+          const title   = lang === 'fr' && tip.titleFr   ? tip.titleFr   : tip.title
+          const summary = lang === 'fr' && tip.summaryFr ? tip.summaryFr : tip.summary
+          const catLabel = lang === 'fr' && cat.labelFr  ? cat.labelFr   : cat.label
+          const lvlLabel = lang === 'fr' && level.labelFr ? level.labelFr : level.label
           return (
             <Link
               key={tip.slug}
@@ -127,22 +143,22 @@ export default function TipsPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="font-body text-[10px] tracking-widest uppercase" style={{ color: cat.color }}>
-                    {cat.label}
+                    {catLabel}
                   </span>
                   <span className="text-pool-chalk-dim text-[10px]">·</span>
                   <span className="font-body text-[10px] tracking-wide" style={{ color: level.color }}>
-                    {level.label}
+                    {lvlLabel}
                   </span>
                 </div>
                 <p className="font-heading text-lg tracking-wide text-pool-chalk leading-tight">
-                  {tip.title}
+                  {title}
                 </p>
                 <p className="font-body text-xs text-pool-chalk-dim mt-1 leading-relaxed">
-                  {tip.summary}
+                  {summary}
                 </p>
                 <div className="flex items-center justify-between mt-2">
                   <p className="font-body text-[10px] text-pool-chalk-dim">
-                    {tip.readMin} min read
+                    {tip.readMin} min {lang === 'fr' ? 'de lecture' : 'read'}
                   </p>
                   <ReadAvatars usernames={completedBy(tip.slug)} />
                 </div>

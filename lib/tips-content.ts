@@ -26,42 +26,48 @@ export type DiagramKey =
 
 export interface TipCategoryInfo {
   label: string
+  labelFr?: string
   icon: string
   color: string
   desc: string
+  descFr?: string
 }
 
 export const TIP_CATEGORIES: Record<TipCategory, TipCategoryInfo> = {
-  fundamentals: { label: 'Fundamentals',   icon: '🎯', color: '#f5c518', desc: 'Stance, grip, bridge & stroke' },
-  aiming:       { label: 'Aiming',         icon: '👁️', color: '#60a5fa', desc: 'See the line, make the ball' },
-  position:     { label: 'Position Play',  icon: '🧭', color: '#22c55e', desc: 'Control the cue ball after contact' },
-  spin:         { label: 'Spin & English', icon: '🌀', color: '#f87171', desc: 'Curve, throw, squirt & swerve' },
-  safety:       { label: 'Safety & Defense', icon: '🛡️', color: '#a855f7', desc: 'Win the game without the shot' },
-  break:        { label: 'The Break',      icon: '💥', color: '#e8c547', desc: 'Start every rack with intent' },
-  mental:       { label: 'Mental Game',    icon: '🧠', color: '#38bdf8', desc: 'Confidence, focus & routine' },
-  strategy:     { label: 'Strategy',       icon: '🗺️', color: '#fb923c', desc: 'Plan the table like a pro' },
+  fundamentals: { label: 'Fundamentals',    labelFr: 'Fondamentaux',       icon: '🎯', color: '#f5c518', desc: 'Stance, grip, bridge & stroke',            descFr: 'Position, prise, pont & mouvement' },
+  aiming:       { label: 'Aiming',          labelFr: 'Visée',              icon: '👁️', color: '#60a5fa', desc: 'See the line, make the ball',              descFr: 'Voir la ligne, empocher la bille' },
+  position:     { label: 'Position Play',   labelFr: 'Jeu de Position',    icon: '🧭', color: '#22c55e', desc: 'Control the cue ball after contact',        descFr: 'Contrôler la bille blanche après le contact' },
+  spin:         { label: 'Spin & English',  labelFr: 'Effets',             icon: '🌀', color: '#f87171', desc: 'Curve, throw, squirt & swerve',             descFr: 'Courbe, déviation, squirt & swerve' },
+  safety:       { label: 'Safety & Defense',labelFr: 'Sécurité & Défense', icon: '🛡️', color: '#a855f7', desc: 'Win the game without the shot',            descFr: 'Gagner la partie sans le tir' },
+  break:        { label: 'The Break',       labelFr: "L'Ouverture",        icon: '💥', color: '#e8c547', desc: 'Start every rack with intent',              descFr: 'Commencer chaque rack avec intention' },
+  mental:       { label: 'Mental Game',     labelFr: 'Jeu Mental',         icon: '🧠', color: '#38bdf8', desc: 'Confidence, focus & routine',              descFr: 'Confiance, concentration & routine' },
+  strategy:     { label: 'Strategy',        labelFr: 'Stratégie',          icon: '🗺️', color: '#fb923c', desc: 'Plan the table like a pro',                descFr: 'Planifier la table comme un pro' },
 }
 
 export const TIP_CATEGORY_ORDER: TipCategory[] = [
   'fundamentals', 'aiming', 'position', 'spin', 'safety', 'break', 'mental', 'strategy',
 ]
 
-export const TIP_LEVEL_STYLES: Record<TipLevel, { label: string; color: string }> = {
-  beginner:     { label: 'Beginner',     color: '#22c55e' },
-  intermediate: { label: 'Intermediate', color: '#f5c518' },
-  advanced:     { label: 'Advanced',     color: '#ef4444' },
+export const TIP_LEVEL_STYLES: Record<TipLevel, { label: string; labelFr?: string; color: string }> = {
+  beginner:     { label: 'Beginner',     labelFr: 'Débutant',       color: '#22c55e' },
+  intermediate: { label: 'Intermediate', labelFr: 'Intermédiaire',  color: '#f5c518' },
+  advanced:     { label: 'Advanced',     labelFr: 'Avancé',         color: '#ef4444' },
 }
 
 export interface TipArticle {
   slug: string
   title: string
+  titleFr?: string
   category: TipCategory
   level: TipLevel
   readMin: number
   summary: string
+  summaryFr?: string
   diagram?: DiagramKey
   body: string[]
+  bodyFr?: string[]
   takeaway: string
+  takeawayFr?: string
 }
 
 // ── FUNDAMENTALS ──────────────────────────────────────────────────────────

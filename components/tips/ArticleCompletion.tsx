@@ -5,9 +5,11 @@ import PlayerAvatar from '@/components/PlayerAvatar'
 import { PLAYERS, PLAYER_STYLES } from '@/lib/game-config'
 import { TIP_ARTICLES, TIP_CATEGORIES, getTipsByCategory, type TipCategory } from '@/lib/tips-content'
 import { useTipsProgress } from './TipsProgressContext'
+import { useLang } from './LanguageContext'
 
 export default function ArticleCompletion({ slug, category }: { slug: string; category: TipCategory }) {
   const { loading, currentUser, completedBy, isCompletedByMe, toggleCompletion } = useTipsProgress()
+  const { lang } = useLang()
 
   if (loading) return null
 
@@ -51,7 +53,10 @@ export default function ArticleCompletion({ slug, category }: { slug: string; ca
             color: iCompleted ? '#22c55e' : 'rgb(var(--pool-chalk-dim))',
           }}
         >
-          {iCompleted ? '✓ Read' : 'Mark as read'}
+          {iCompleted
+            ? (lang === 'fr' ? '✓ Lu' : '✓ Read')
+            : (lang === 'fr' ? 'Marquer comme lu' : 'Mark as read')
+          }
         </button>
       </div>
 
@@ -62,8 +67,14 @@ export default function ArticleCompletion({ slug, category }: { slug: string; ca
           style={{ borderColor: `${cat.color}40`, background: `${cat.color}10` }}
         >
           <div>
-            <p className="font-heading text-sm tracking-widest" style={{ color: cat.color }}>CATEGORY COMPLETE</p>
-            <p className="font-body text-xs text-pool-chalk-dim mt-1">Take the {cat.label} quiz</p>
+            <p className="font-heading text-sm tracking-widest" style={{ color: cat.color }}>
+              {lang === 'fr' ? 'CATÉGORIE TERMINÉE' : 'CATEGORY COMPLETE'}
+            </p>
+            <p className="font-body text-xs text-pool-chalk-dim mt-1">
+              {lang === 'fr'
+                ? `Quiz ${cat.labelFr ?? cat.label}`
+                : `Take the ${cat.label} quiz`}
+            </p>
           </div>
           <span className="text-2xl">{cat.icon}</span>
         </Link>
@@ -76,8 +87,12 @@ export default function ArticleCompletion({ slug, category }: { slug: string; ca
           style={{ borderColor: '#c9a22740', background: '#c9a22710' }}
         >
           <div>
-            <p className="font-heading text-sm tracking-widest text-pool-gold">ALL 51 ARTICLES COMPLETE</p>
-            <p className="font-body text-xs text-pool-chalk-dim mt-1">Take the Final Exam</p>
+            <p className="font-heading text-sm tracking-widest text-pool-gold">
+              {lang === 'fr' ? 'LES 51 ARTICLES TERMINÉS' : 'ALL 51 ARTICLES COMPLETE'}
+            </p>
+            <p className="font-body text-xs text-pool-chalk-dim mt-1">
+              {lang === 'fr' ? "Passer l'Examen Final" : 'Take the Final Exam'}
+            </p>
           </div>
           <span className="text-2xl">🏆</span>
         </Link>
