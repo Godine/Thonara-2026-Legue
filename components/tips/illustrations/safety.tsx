@@ -47,9 +47,6 @@ function DistanceSafetiesOutOfReach() {
       {/* long travel path across the table */}
       <path d="M 55 50 Q 150 35 240 110" fill="none" stroke={GOLD} strokeWidth="1.2" opacity="0.8"
         style={{animation:'saf-path-travel 3s ease-in-out infinite'}} />
-      <g opacity="0.9">
-        <Ball cx={240} cy={110} r={7} color={CHALK} />
-      </g>
       {/* cluster of object balls grouped far away on the right */}
       <Ball cx={255} cy={45} r={6} color="#f5c518" />
       <Ball cx={268} cy={58} r={6} color="#60a5fa" />

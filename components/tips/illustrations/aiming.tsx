@@ -3,29 +3,38 @@ import { Felt, Ball, Cue, StickFigure, Label, Emoji, CHALK, GOLD } from '../scen
 const ACCENT = '#60a5fa' // aiming category color
 
 function FractionalAiming() {
+  // Cueball travels 105px from (78,112) to contact ghost (183,80) near object ball
+  // Deflection line draws in at the moment of contact
   return (
     <g>
       <style>{`
         @keyframes aim-cueball-slide {
-          0%,10%{transform:translate(0px,0px)} 45%,55%{transform:translate(10px,-4px)} 90%,100%{transform:translate(0px,0px)}
+          0%,8%{transform:translate(0px,0px)}
+          45%,65%{transform:translate(105px,-32px)}
+          82%,100%{transform:translate(0px,0px)}
         }
         @keyframes aim-deflect-draw {
-          0%,10%{stroke-dashoffset:82; stroke-dasharray:82} 55%,80%{stroke-dashoffset:0; stroke-dasharray:82} 100%{stroke-dashoffset:82; stroke-dasharray:82}
+          0%,43%{stroke-dashoffset:92;stroke-dasharray:92}
+          65%,80%{stroke-dashoffset:0;stroke-dasharray:92}
+          94%,100%{stroke-dashoffset:92;stroke-dasharray:92}
         }
       `}</style>
       <Felt />
-      {/* cue ball at a half-ball overlap with the object ball */}
-      <g style={{animation:'aim-cueball-slide 3s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
-        <Ball cx={140} cy={95} r={7} color={CHALK} />
+      {/* ghost outline shows the required contact position */}
+      <circle cx={183} cy={80} r="7" fill="none" stroke={CHALK} strokeWidth="1" strokeDasharray="2 2" opacity="0.45" />
+      {/* cue ball slides 105px from far left to the contact position */}
+      <g style={{animation:'aim-cueball-slide 3.5s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
+        <Ball cx={78} cy={112} r={7} color={CHALK} />
       </g>
+      {/* object ball */}
       <Ball cx={195} cy={75} r={7} color="#ef4444" />
-      {/* vertical dashed line splitting the object ball into halves */}
+      {/* half-ball divider */}
       <line x1={195} y1={62} x2={195} y2={88} stroke={ACCENT} strokeWidth="1" strokeDasharray="2 2" opacity="0.7" />
       {/* quarter mark */}
       <line x1={189} y1={64} x2={189} y2={86} stroke={ACCENT} strokeWidth="0.75" strokeDasharray="1.5 1.5" opacity="0.4" />
-      {/* deflection line toward the pocket */}
+      {/* deflection line to pocket — draws in after contact */}
       <line x1={195} y1={75} x2={262} y2={28} stroke={GOLD} strokeWidth="1" opacity="0.7"
-        style={{animation:'aim-deflect-draw 3s ease-in-out infinite'}} />
+        style={{animation:'aim-deflect-draw 3.5s ease-in-out infinite'}} />
       <Label x={250} y={22} size={7} color={GOLD} opacity={0.8}>~30°</Label>
       <Label x={150} y={138} size={7} opacity={0.7}>half ball, quarter ball, full ball</Label>
     </g>
@@ -36,17 +45,17 @@ function FindingYourDominantEye() {
   return (
     <g>
       <style>{`
-        @keyframes aim-tri-drift { 0%,100%{transform:translateX(0px)} 50%{transform:translateX(-7px)} }
-        @keyframes aim-sight-pulse { 0%,100%{opacity:0.7} 50%{opacity:0.25} }
+        @keyframes aim-tri-drift { 0%,100%{transform:translateX(0px)} 50%{transform:translateX(-14px)} }
+        @keyframes aim-sight-pulse { 0%,100%{opacity:0.7} 50%{opacity:0.2} }
       `}</style>
       <Felt />
       <StickFigure cx={62} cy={95} color={ACCENT} pose="stand" />
       <Emoji x={62} y={62} size={16}>👁️</Emoji>
-      {/* hand-frame triangle held out at arm's length */}
+      {/* hand-frame triangle drifts 14px toward the dominant eye side */}
       <g style={{animation:'aim-tri-drift 2.5s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
         <polygon points="115,90 145,75 145,105" fill="none" stroke={CHALK} strokeWidth="1.2" opacity="0.7" />
       </g>
-      {/* sight line drifting through the frame to the ball */}
+      {/* sight line to the target ball */}
       <line x1={62} y1={88} x2={250} y2={50} stroke={GOLD} strokeWidth="1" strokeDasharray="2 2"
         style={{animation:'aim-sight-pulse 2.5s ease-in-out infinite'}} />
       <Ball cx={250} cy={50} r={7} color="#22c55e" />
@@ -60,7 +69,7 @@ function AimingThinCutsWithoutFear() {
     <g>
       <style>{`
         @keyframes aim-thin-draw {
-          0%,10%{stroke-dashoffset:90; stroke-dasharray:90} 55%,75%{stroke-dashoffset:0; stroke-dasharray:90} 90%,100%{stroke-dashoffset:90; stroke-dasharray:90}
+          0%,10%{stroke-dashoffset:90;stroke-dasharray:90} 55%,75%{stroke-dashoffset:0;stroke-dasharray:90} 90%,100%{stroke-dashoffset:90;stroke-dasharray:90}
         }
         @keyframes aim-thin-flash {
           0%,55%{opacity:0.7} 65%,75%{opacity:1} 80%,100%{opacity:0.7}
@@ -69,9 +78,9 @@ function AimingThinCutsWithoutFear() {
       <Felt />
       <Ball cx={120} cy={100} r={7} color={CHALK} />
       <Ball cx={210} cy={70} r={7} color="#f5c518" />
-      {/* faint ghost-ball outline mostly off to the side */}
+      {/* ghost ball outline at thin-contact position — grazing the far edge */}
       <circle cx={221} cy={62} r="7" fill="none" stroke={CHALK} strokeWidth="1" strokeDasharray="2 2" opacity="0.35" />
-      {/* contact line grazing the far edge for a thin cut */}
+      {/* contact line grazing the far edge */}
       <line x1={120} y1={100} x2={216} y2={65} stroke={ACCENT} strokeWidth="1" strokeDasharray="2 2" opacity="0.7" />
       {/* object ball deflects sharply toward the pocket */}
       <line x1={210} y1={70} x2={283} y2={18} stroke={GOLD} strokeWidth="1" opacity="0.7"
@@ -93,7 +102,7 @@ function ReadingCombinationShots() {
       <Ball cx={70} cy={108} r={7} color={CHALK} />
       <Ball cx={155} cy={82} r={7} color="#f5c518" label="A" />
       <Ball cx={225} cy={50} r={7} color="#ef4444" label="B" />
-      {/* chain reaction lines */}
+      {/* chain reaction lines appear in sequence — each adds more error */}
       <line x1={70} y1={108} x2={155} y2={82} stroke={ACCENT} strokeWidth="1" strokeDasharray="2 2"
         style={{animation:'aim-combo1 3s ease-in-out infinite'}} />
       <line x1={155} y1={82} x2={225} y2={50} stroke={ACCENT} strokeWidth="1" strokeDasharray="2 2"
@@ -117,7 +126,7 @@ function WhyProsRecheckAimTwice() {
       <Cue x1={100} y1={112} x2={205} y2={82} />
       <Ball cx={210} cy={80} r={7} color={CHALK} />
       <Ball cx={262} cy={48} r={7} color="#22c55e" />
-      {/* two sight-lines, looked at twice */}
+      {/* two sight-lines alternating: first look at cueball, second look at pocket */}
       <line x1={76} y1={80} x2={210} y2={80} stroke={GOLD} strokeWidth="1" strokeDasharray="2 2"
         style={{animation:'aim-look1 3s ease-in-out infinite'}} />
       <line x1={76} y1={80} x2={262} y2={48} stroke={GOLD} strokeWidth="1" strokeDasharray="2 2"

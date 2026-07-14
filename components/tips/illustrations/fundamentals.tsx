@@ -3,94 +3,154 @@ import { Felt, Ball, Cue, StickFigure, Label, Emoji, CHALK, GOLD } from '../scen
 const ACCENT = '#f5c518' // fundamentals category color
 
 function BuildARepeatableStance() {
+  // Bridge pose body geometry: hip at (cx,cy), head at (cx+5,cy-15),
+  // bridge-hand arm end at (cx+15,cy+7), legs at (cx-2/+10, cy+16/17)
   return (
     <g>
       <style>{`
-        @keyframes fnd-bob { 0%,100%{transform:translateY(0px)} 50%{transform:translateY(-2px)} }
-        @keyframes fnd-ghost { 0%,100%{opacity:0.22} 50%{opacity:0.38} }
+        @keyframes fnd-ring1 {
+          0%,5%{transform:scale(0);opacity:0}
+          18%,35%{transform:scale(1);opacity:1}
+          55%,100%{transform:scale(0.6);opacity:0.25}
+        }
+        @keyframes fnd-ring2 {
+          0%,38%{transform:scale(0);opacity:0}
+          51%,68%{transform:scale(1);opacity:1}
+          82%,100%{transform:scale(0.6);opacity:0.25}
+        }
+        @keyframes fnd-ring3 {
+          0%,62%{transform:scale(0);opacity:0}
+          75%,90%{transform:scale(1);opacity:1}
+          98%,100%{transform:scale(0.6);opacity:0.25}
+        }
+        @keyframes fnd-lock {
+          0%,90%{opacity:0;transform:scale(0.5)}
+          95%,98%{opacity:1;transform:scale(1)}
+          100%{opacity:0}
+        }
       `}</style>
       <Felt />
-      <g style={{animation:'fnd-ghost 2s ease-in-out infinite'}} transform="translate(4,2)">
-        <StickFigure cx={70} cy={95} color={ACCENT} pose="stand" />
+      <StickFigure cx={100} cy={95} color={ACCENT} pose="bridge" />
+      <Ball cx={205} cy={73} r={7} color={CHALK} />
+      {/* ring 1: feet — legs extend to ~(cy+16) */}
+      <circle cx={104} cy={112} r="11" fill="none" stroke={ACCENT} strokeWidth="1.8"
+        style={{transformBox:'fill-box', transformOrigin:'center', animation:'fnd-ring1 4s ease-in-out infinite'}} />
+      {/* ring 2: bridge hand — right arm end at (cx+15, cy+7) */}
+      <circle cx={115} cy={102} r="10" fill="none" stroke={ACCENT} strokeWidth="1.8"
+        style={{transformBox:'fill-box', transformOrigin:'center', animation:'fnd-ring2 4s ease-in-out infinite'}} />
+      {/* ring 3: shooting eye — head at (cx+5, cy-15) */}
+      <circle cx={105} cy={80} r="9" fill="none" stroke={ACCENT} strokeWidth="1.8"
+        style={{transformBox:'fill-box', transformOrigin:'center', animation:'fnd-ring3 4s ease-in-out infinite'}} />
+      <g style={{transformOrigin:'100px 58px', animation:'fnd-lock 4s ease-in-out infinite'}}>
+        <Label x={100} y={60} size={11} color={GOLD} weight="bold">✓</Label>
       </g>
-      <g style={{animation:'fnd-bob 2s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
-        <StickFigure cx={70} cy={95} color={ACCENT} pose="stand" />
-      </g>
-      <Ball cx={200} cy={75} r={7} color={CHALK} />
-      <Label x={150} y={140} size={7} opacity={0.7}>same setup, every single time</Label>
+      <Label x={200} y={138} size={7} opacity={0.7}>same checkpoints, every time</Label>
     </g>
   )
 }
 
 function ThePendulumGrip() {
+  // ±12° rotation around elbow/grip pivot (175,88)
+  // tip swings from y≈84 (at -12°) to y≈131 (at +12°) — 47px visible arc
   return (
     <g>
       <style>{`
-        @keyframes fnd-pendulum { 0%,100%{transform:rotate(-4deg)} 50%{transform:rotate(4deg)} }
-        @keyframes fnd-arc-draw { 0%,10%{stroke-dashoffset:75} 55%,80%{stroke-dashoffset:0} 100%{stroke-dashoffset:75} }
+        @keyframes fnd-pendulum {
+          0%,100%{transform:rotate(-12deg)}
+          50%{transform:rotate(12deg)}
+        }
+        @keyframes fnd-arc-draw {
+          0%,5%{stroke-dashoffset:110;stroke-dasharray:110}
+          60%,80%{stroke-dashoffset:0;stroke-dasharray:110}
+          100%{stroke-dashoffset:110;stroke-dasharray:110}
+        }
       `}</style>
       <Felt pockets={false} />
+      {/* cue swings around elbow pivot */}
       <g style={{transformOrigin:'175px 88px', animation:'fnd-pendulum 2s ease-in-out infinite'}}>
         <Cue x1={60} y1={108} x2={235} y2={62} />
       </g>
-      {/* hand / grip */}
-      <ellipse cx={175} cy={88} rx="11" ry="7" fill="none" stroke={ACCENT} strokeWidth="1.5" />
-      {/* pendulum swing arc */}
-      <path
-        d="M 150 60 A 40 40 0 0 1 200 116"
-        fill="none" stroke={CHALK} strokeWidth="1" opacity="0.6"
-        style={{strokeDasharray:75, strokeDashoffset:75, animation:'fnd-arc-draw 2s ease-in-out infinite'}}
-      />
-      <Label x={175} y={45} size={7} opacity={0.7}>swing from the elbow</Label>
+      {/* grip oval marks the pivot point */}
+      <ellipse cx={175} cy={88} rx="11" ry="7" fill="none" stroke={ACCENT} strokeWidth="1.8" />
+      {/* arc tracing the tip's range of motion */}
+      <path d="M 61 85 A 117 117 0 0 1 68 131"
+        fill="none" stroke={CHALK} strokeWidth="1.2" opacity="0.5"
+        style={{strokeDasharray:110, strokeDashoffset:110, animation:'fnd-arc-draw 2s ease-in-out infinite'}} />
+      <Label x={175} y={40} size={7} opacity={0.7}>pivot at the elbow</Label>
       <Label x={175} y={130} size={7} opacity={0.6}>loose grip = free pendulum</Label>
     </g>
   )
 }
 
 function BridgeHandUnsungHero() {
+  // cue direction (70,120)→(195,78): unit=(0.947,-0.318)
+  // 26px stroke → translate(24.6,-8.3) ≈ (25,-8)
   return (
     <g>
       <style>{`
-        @keyframes fnd-cue-stroke { 0%,100%{transform:translateX(0px) translateY(0px)} 40%,60%{transform:translateX(-6px) translateY(2px)} }
+        @keyframes fnd-cue-stroke {
+          0%,10%{transform:translate(0px,0px)}
+          35%,58%{transform:translate(25px,-8px)}
+          80%,100%{transform:translate(0px,0px)}
+        }
       `}</style>
       <Felt />
-      {/* bridge "V" on the felt */}
-      <line x1={108} y1={100} x2={150} y2={84} stroke={ACCENT} strokeWidth="2" strokeLinecap="round" />
-      <line x1={132} y1={100} x2={150} y2={84} stroke={ACCENT} strokeWidth="2" strokeLinecap="round" />
+      {/* V bridge groove — fixed anchor, does not move */}
+      <line x1={108} y1={100} x2={150} y2={84} stroke={ACCENT} strokeWidth="2.5" strokeLinecap="round" />
+      <line x1={132} y1={100} x2={150} y2={84} stroke={ACCENT} strokeWidth="2.5" strokeLinecap="round" />
+      {/* cue slides 25px through the groove and back */}
       <g style={{animation:'fnd-cue-stroke 2s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
         <Cue x1={70} y1={120} x2={195} y2={78} />
       </g>
       <Ball cx={200} cy={75} r={7} color={CHALK} />
-      <Ball cx={250} cy={60} r={7} color="#ef4444" />
-      <Label x={130} y={118} size={7} opacity={0.75}>a steady bridge = a steady aim</Label>
+      <Ball cx={255} cy={58} r={7} color="#ef4444" />
+      <Label x={155} y={138} size={7} opacity={0.75}>bridge locks the line</Label>
     </g>
   )
 }
 
 function AnatomyOfASmoothStroke() {
+  // cue (95,105)→(210,78): direction unit=(0.974,-0.229)
+  // back 19px → translate(-18.5,4.4) ≈ (-19,4)
+  // through 26px past start → translate(25.3,-5.9) ≈ (25,-6)
+  // ball at (215,76) rolls 52px to (267,64) where green target ball sits
   return (
     <g>
       <style>{`
-        @keyframes fnd-stroke-a { 0%,100%{opacity:0.8} 50%{opacity:0.2} }
-        @keyframes fnd-stroke-b { 0%,100%{opacity:0.2} 50%{opacity:0.85} }
+        @keyframes fnd-cue-anim {
+          0%,5%{transform:translate(0px,0px)}
+          22%,40%{transform:translate(-19px,4px)}
+          55%,70%{transform:translate(25px,-6px)}
+          85%,100%{transform:translate(0px,0px)}
+        }
+        @keyframes fnd-ball-roll {
+          0%,53%{transform:translate(0px,0px)}
+          70%,82%{transform:translate(52px,-12px)}
+          97%,100%{transform:translate(0px,0px)}
+        }
+        @keyframes fnd-lbl-back {
+          0%,15%{opacity:0} 25%,40%{opacity:1} 50%,100%{opacity:0}
+        }
+        @keyframes fnd-lbl-thru {
+          0%,50%{opacity:0} 58%,70%{opacity:1} 80%,100%{opacity:0}
+        }
       `}</style>
       <Felt />
       <StickFigure cx={68} cy={95} color={ACCENT} pose="aim" />
-      <Cue x1={95} y1={105} x2={205} y2={80} />
-      <Ball cx={210} cy={78} r={7} color={CHALK} />
-      <Ball cx={262} cy={55} r={7} color="#22c55e" />
-      {/* back-and-forth stroke indicator */}
-      <path
-        d="M 110 118 L 175 105"
-        fill="none" stroke={GOLD} strokeWidth="1.2" strokeDasharray="3 2" markerEnd="none"
-        style={{animation:'fnd-stroke-a 2s ease-in-out infinite'}}
-      />
-      <path
-        d="M 110 118 L 175 105"
-        fill="none" stroke={GOLD} strokeWidth="1.2" strokeDasharray="3 2" transform="translate(0,6)"
-        style={{animation:'fnd-stroke-b 2s ease-in-out infinite'}}
-      />
-      <Label x={140} y={138} size={7} opacity={0.7}>smooth back, smooth through</Label>
+      <g style={{animation:'fnd-cue-anim 3.5s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
+        <Cue x1={95} y1={105} x2={210} y2={78} />
+      </g>
+      <g style={{animation:'fnd-ball-roll 3.5s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
+        <Ball cx={215} cy={76} r={7} color={CHALK} />
+      </g>
+      <Ball cx={267} cy={64} r={7} color="#22c55e" />
+      <g style={{animation:'fnd-lbl-back 3.5s ease-in-out infinite'}}>
+        <Label x={155} y={125} size={8} color={ACCENT} weight="bold">BACK</Label>
+      </g>
+      <g style={{animation:'fnd-lbl-thru 3.5s ease-in-out infinite'}}>
+        <Label x={155} y={125} size={8} color={GOLD} weight="bold">THROUGH</Label>
+      </g>
+      <Label x={150} y={138} size={7} opacity={0.7}>smooth back, smooth through</Label>
     </g>
   )
 }
@@ -125,24 +185,36 @@ function EyePatternAndAlignment() {
 }
 
 function FollowThroughFinishingTheShot() {
+  // Ball rolls 140px from (120,92) to (260,66) — huge visible travel
+  // Cue tip extends 34px so it reaches ~where ball started
+  // cue direction (45,118)→(85,102): unit=(0.928,-0.372) → 34px=(31.6,-12.6)≈(32,-13)
   return (
     <g>
       <style>{`
-        @keyframes fnd-follow-ball { 0%,15%{transform:translate(0px,0px)} 50%,65%{transform:translate(7px,-2px)} 100%{transform:translate(0px,0px)} }
-        @keyframes fnd-follow-cue { 0%,15%{transform:translate(0px,0px)} 50%,65%{transform:translate(8px,-2px)} 100%{transform:translate(0px,0px)} }
+        @keyframes fnd-foll-ball {
+          0%,12%{transform:translate(0px,0px)}
+          50%,68%{transform:translate(140px,-26px)}
+          85%,100%{transform:translate(0px,0px)}
+        }
+        @keyframes fnd-foll-cue {
+          0%,12%{transform:translate(0px,0px)}
+          50%,68%{transform:translate(32px,-13px)}
+          85%,100%{transform:translate(0px,0px)}
+        }
       `}</style>
       <Felt />
-      {/* cue ball mid-roll toward object ball */}
-      <g style={{animation:'fnd-follow-ball 2.5s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
-        <Ball cx={150} cy={85} r={7} color={CHALK} />
+      {/* dashed guide showing cue-to-ball gap before shot */}
+      <line x1={85} y1={102} x2={120} y2={92} stroke={CHALK} strokeWidth="1" strokeDasharray="2 2" opacity="0.3" />
+      {/* cue follows through as ball leaves */}
+      <g style={{animation:'fnd-foll-cue 3s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
+        <Cue x1={45} y1={118} x2={85} y2={102} />
       </g>
-      <Ball cx={235} cy={62} r={7} color="#60a5fa" />
-      <line x1={120} y1={97} x2={150} y2={85} stroke={CHALK} strokeWidth="1" strokeDasharray="2 2" opacity="0.35" />
-      {/* cue follows through past where the ball was struck */}
-      <g style={{animation:'fnd-follow-cue 2.5s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
-        <Cue x1={45} y1={118} x2={170} y2={80} />
+      {/* ball rolls the full width of the table */}
+      <g style={{animation:'fnd-foll-ball 3s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
+        <Ball cx={120} cy={92} r={7} color={CHALK} />
       </g>
-      <Label x={150} y={138} size={7} opacity={0.7}>the cue finishes where the ball started</Label>
+      <Ball cx={260} cy={66} r={7} color="#60a5fa" />
+      <Label x={150} y={138} size={7} opacity={0.7}>cue tip reaches where ball started</Label>
     </g>
   )
 }
@@ -151,23 +223,37 @@ function WarmUpRoutineBeforeYouPlay() {
   return (
     <g>
       <style>{`
-        @keyframes fnd-ball1 { 0%,5%{opacity:0} 20%,90%{opacity:1} 100%{opacity:0} }
-        @keyframes fnd-ball2 { 0%,20%{opacity:0} 35%,90%{opacity:1} 100%{opacity:0} }
-        @keyframes fnd-ball3 { 0%,35%{opacity:0} 50%,90%{opacity:1} 100%{opacity:0} }
-        @keyframes fnd-ball-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.15)} }
+        @keyframes fnd-stroke {
+          0%,10%{transform:translate(0px,0px)}
+          30%,52%{transform:translate(20px,-5px)}
+          72%,100%{transform:translate(0px,0px)}
+        }
+        @keyframes fnd-ball1 {
+          0%,5%{opacity:0;transform:scale(0)} 22%,85%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(0)}
+        }
+        @keyframes fnd-ball2 {
+          0%,22%{opacity:0;transform:scale(0)} 40%,85%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(0)}
+        }
+        @keyframes fnd-ball3 {
+          0%,40%{opacity:0;transform:scale(0)} 58%,85%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(0)}
+        }
       `}</style>
       <Felt />
-      <Emoji x={150} y={68} size={34}>🤸</Emoji>
-      <g style={{animation:'fnd-ball1 3s ease-in-out infinite'}}>
-        <Ball cx={60} cy={120} r={6} color="#f5c518" />
+      <StickFigure cx={70} cy={98} color={ACCENT} pose="aim" />
+      <g style={{animation:'fnd-stroke 3s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
+        <Cue x1={95} y1={110} x2={175} y2={88} />
       </g>
-      <g style={{animation:'fnd-ball2 3s ease-in-out infinite'}}>
-        <Ball cx={80} cy={120} r={6} color="#60a5fa" />
+      <Ball cx={180} cy={86} r={6} color={CHALK} />
+      <g style={{animation:'fnd-ball1 3s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
+        <Ball cx={215} cy={74} r={5} color="#f5c518" />
       </g>
-      <g style={{animation:'fnd-ball3 3s ease-in-out infinite'}}>
-        <Ball cx={100} cy={120} r={6} color="#22c55e" />
+      <g style={{animation:'fnd-ball2 3s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
+        <Ball cx={237} cy={66} r={5} color="#60a5fa" />
       </g>
-      <Emoji x={250} y={40} size={20}>⏱️</Emoji>
+      <g style={{animation:'fnd-ball3 3s ease-in-out infinite', transformBox:'fill-box', transformOrigin:'center'}}>
+        <Ball cx={259} cy={58} r={5} color="#22c55e" />
+      </g>
+      <Emoji x={250} y={38} size={20}>⏱️</Emoji>
       <Label x={150} y={138} size={7} opacity={0.7}>loosen up before it counts</Label>
     </g>
   )
