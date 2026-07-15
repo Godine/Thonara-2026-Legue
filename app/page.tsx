@@ -9,10 +9,12 @@ import {
   computeAllAchievements, computeAllProgress,
 } from '@/lib/achievements'
 import Link from 'next/link'
+import { format, parseISO } from 'date-fns'
 import PlayerAvatar from '@/components/PlayerAvatar'
 import PullToRefresh from '@/components/PullToRefresh'
 import FlipBadgeCard from '@/components/FlipBadgeCard'
 import SeasonCountdown from '@/components/SeasonCountdown'
+import EloRatingChart from '@/components/EloRatingChart'
 import { PLAYERS, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import { buildFirstShotMap, sortGamesByPlayOrder } from '@/lib/stats'
 
@@ -173,141 +175,54 @@ async function SeasonCountdownStream() {
   )
 }
 
-async function FireStreaksStream() {
+async function EloChartStream() {
   const db = createClient()
   const [games, shots] = await Promise.all([fetchCompletedGames(db), fetchAllShots(db)])
 
-  // Sort by actual play order: session date first, then by first-shot timestamp
-  // within a session (game_number only reflects the schedule, not play order).
   const sorted = sortGamesByPlayOrder(games, buildFirstShotMap(shots))
 
-  const playerIdMap: Partial<Record<PlayerUsername, string>> = {}
+  // Build id → username and session order
+  const idToUsername: Record<string, PlayerUsername> = {}
+  const seenSessions = new Set<string>()
+  const sessionOrder: string[] = []
   for (const g of sorted) {
-    playerIdMap[g.player1.username as PlayerUsername] = g.player1_id
-    playerIdMap[g.player2.username as PlayerUsername] = g.player2_id
+    idToUsername[g.player1_id] = g.player1.username as PlayerUsername
+    idToUsername[g.player2_id] = g.player2.username as PlayerUsername
+    if (!seenSessions.has(g.session_id)) {
+      seenSessions.add(g.session_id)
+      sessionOrder.push(g.session_id)
+    }
   }
 
-  const players = PLAYERS.map(username => {
-    const style = PLAYER_STYLES[username]
-    const pid = playerIdMap[username]
-    const results = pid
-      ? sorted.filter(g => g.player1_id === pid || g.player2_id === pid).map(g => g.winner_id === pid)
-      : []
+  // Compute ELO per session — K=32, all players start at 1200
+  const runElo: Record<PlayerUsername, number> = { adib: 1200, ahmed: 1200, godine: 1200 }
 
-    let current = 0
-    for (let i = results.length - 1; i >= 0; i--) {
-      if (results[i]) current++
-      else break
-    }
-    let best = 0, cur = 0
-    for (const r of results) {
-      if (r) { cur++; best = Math.max(best, cur) } else cur = 0
-    }
+  const eloAtSession: { label: string; adib: number; ahmed: number; godine: number }[] = []
 
-    return { username, style, current, best, last10: results.slice(-10) }
-  }).sort((a, b) => b.current - a.current || b.best - a.best)
+  for (const sid of sessionOrder) {
+    for (const g of sorted.filter(g2 => g2.session_id === sid && !!g2.winner_id)) {
+      const wu = idToUsername[g.winner_id!] as PlayerUsername | undefined
+      const lu = (g.player1.username === wu ? g.player2.username : g.player1.username) as PlayerUsername
+      if (!wu || runElo[wu] == null || runElo[lu] == null) continue
+      const delta = Math.round(32 * (1 - 1 / (1 + Math.pow(10, (runElo[lu] - runElo[wu]) / 400))))
+      runElo[wu] += delta
+      runElo[lu] -= delta
+    }
+    const sess = sorted.find(g => g.session_id === sid)?.session
+    eloAtSession.push({
+      label: sess?.date ? format(parseISO(sess.date), 'd MMM') : sid.slice(0, 4),
+      adib: runElo.adib, ahmed: runElo.ahmed, godine: runElo.godine,
+    })
+  }
 
   return (
     <section className="px-4 pb-5">
-      <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim mb-3">WIN STREAKS</p>
-      <div className="space-y-2">
-        {players.map(p => <FireStreakCard key={p.username} {...p} />)}
+      <div className="flex items-center justify-between mb-3">
+        <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim">ELO RATINGS</p>
+        <p className="font-body text-[10px] text-pool-chalk-dim">K=32 · starts 1200</p>
       </div>
+      <EloRatingChart eloAtSession={eloAtSession} eloRatings={{ ...runElo } as Record<PlayerUsername, number>} />
     </section>
-  )
-}
-
-function FireStreakCard({ username, style, current, best, last10 }: {
-  username: PlayerUsername
-  style: typeof PLAYER_STYLES[PlayerUsername]
-  current: number
-  best: number
-  last10: boolean[]
-}) {
-  const lit = current > 0
-  const message =
-    current === 0 ? 'Time to start a new streak' :
-    current === 1 ? 'Just getting started' :
-    current < 4   ? 'Building momentum' :
-    current < 7   ? 'On fire!' : 'Unstoppable!'
-
-  const padding = 10 - last10.length
-
-  return (
-    <div
-      className="bg-pool-surface rounded-2xl border p-4"
-      style={{
-        borderColor: lit ? `${style.color}40` : 'rgb(var(--pool-border))',
-        boxShadow: lit ? `0 0 24px ${style.color}12` : undefined,
-      }}
-    >
-      <div className="flex items-center gap-3.5">
-        {/* Avatar with flame badge */}
-        <div className="relative shrink-0">
-          <div style={{ filter: lit ? `drop-shadow(0 0 10px ${style.color}55)` : undefined }}>
-            <PlayerAvatar username={username} size={56} />
-          </div>
-          <div
-            className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center border-2 border-pool-surface"
-            style={{ background: lit ? `radial-gradient(circle, ${style.color}44 0%, ${style.color}11 70%)` : 'rgb(var(--pool-surface))' }}
-          >
-            <span
-              className="text-base leading-none"
-              style={{ filter: lit ? `drop-shadow(0 0 5px ${style.color}99)` : 'grayscale(1) opacity(0.35)' }}
-            >
-              🔥
-            </span>
-          </div>
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <p className="font-heading text-sm tracking-widest" style={{ color: style.color }}>
-            {style.label.toUpperCase()}
-          </p>
-          <p className="font-body text-xs text-pool-chalk-dim mt-1 leading-snug">
-            {message}
-            {best > 1 && <> · best <span className="text-pool-chalk">{best}</span></>}
-          </p>
-        </div>
-
-        {/* Big streak number */}
-        <div className="text-right shrink-0 pl-1">
-          <p
-            className="font-heading text-5xl leading-none tabular-nums"
-            style={{ color: lit ? style.color : '#7a786f' }}
-          >
-            {current}
-          </p>
-          <p className="font-body text-[10px] tracking-widest uppercase text-pool-chalk-dim mt-1">
-            {current === 1 ? 'win streak' : 'win streak'}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="font-body text-[10px] tracking-widest uppercase text-pool-chalk-dim">Last 10 games</span>
-          <span className="font-body text-[10px] tracking-widest uppercase text-pool-chalk-dim">Latest →</span>
-        </div>
-        <div className="flex gap-1">
-          {Array.from({ length: 10 }).map((_, i) => {
-            const result = i < padding ? null : last10[i - padding]
-            return (
-              <div
-                key={i}
-                className="flex-1 h-3 rounded-full"
-                style={{
-                  background:
-                    result === true  ? `linear-gradient(90deg, ${style.color}99, ${style.color})` :
-                    result === false ? 'rgb(var(--pool-border))' : 'rgb(var(--pool-track))',
-                  boxShadow: result === true ? `0 0 8px ${style.color}66` : undefined,
-                }}
-              />
-            )
-          })}
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -434,31 +349,21 @@ function SeasonCountdownSkeleton() {
   )
 }
 
-function FireStreaksSkeleton() {
+function EloChartSkeleton() {
   return (
     <section className="px-4 pb-5">
-      <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim mb-3">WIN STREAKS</p>
-      <div className="space-y-2 animate-pulse">
-        {[0, 1, 2].map(i => (
-          <div key={i} className="bg-pool-surface rounded-2xl border border-pool-border p-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-14 h-14 rounded-full bg-pool-border shrink-0" />
-              <div className="flex-1 space-y-2">
-                <div className="h-3 bg-pool-border rounded w-16" />
-                <div className="h-3 bg-pool-border rounded w-28" />
-              </div>
-              <div className="space-y-2 shrink-0">
-                <div className="h-9 bg-pool-border rounded w-10 ml-auto" />
-                <div className="h-2 bg-pool-border rounded w-14" />
-              </div>
+      <p className="font-heading text-xs tracking-[0.25em] text-pool-chalk-dim mb-3">ELO RATINGS</p>
+      <div className="bg-pool-surface rounded-2xl border border-pool-border p-4 animate-pulse">
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="flex flex-col items-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-pool-border" />
+              <div className="h-6 bg-pool-border rounded w-14" />
+              <div className="h-3 bg-pool-border rounded w-8" />
             </div>
-            <div className="flex gap-1 mt-4">
-              {[0,1,2,3,4,5,6,7,8,9].map(j => (
-                <div key={j} className="flex-1 h-3 bg-pool-border rounded-full" />
-              ))}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
+        <div className="h-32 bg-pool-border rounded-xl" />
       </div>
     </section>
   )
@@ -583,9 +488,9 @@ export default function Dashboard() {
         <SeasonCountdownStream />
       </Suspense>
 
-      {/* ── WIN STREAKS / FIRE TRACKER (streams in) ──────────────────── */}
-      <Suspense fallback={<FireStreaksSkeleton />}>
-        <FireStreaksStream />
+      {/* ── ELO RATINGS (streams in) ─────────────────────────────────── */}
+      <Suspense fallback={<EloChartSkeleton />}>
+        <EloChartStream />
       </Suspense>
 
       {/* ── NAV GRID ─────────────────────────────────────────────────── */}
