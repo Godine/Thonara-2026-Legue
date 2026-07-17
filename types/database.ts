@@ -27,6 +27,9 @@ export interface Game {
   winner_id: string | null
   is_complete: boolean
   loser_potted_black: boolean
+  breaker_id: string | null
+  loser_balls_remaining: number | null
+  player1_color: 'yellow' | 'red' | null
   created_at: string
   player1?: Player
   player2?: Player

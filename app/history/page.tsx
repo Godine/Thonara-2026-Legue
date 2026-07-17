@@ -7,6 +7,7 @@ import PullToRefresh from '@/components/PullToRefresh'
 import PlayerAvatar from '@/components/PlayerAvatar'
 import { format } from 'date-fns'
 import { PLAYER_STYLES, PLAYERS, type PlayerUsername } from '@/lib/game-config'
+import { formatTime } from '@/lib/stats'
 import type { Player, Shot } from '@/types/database'
 import type { SessionFull } from '@/lib/queries/sessions'
 
@@ -195,6 +196,10 @@ export default async function HistoryPage() {
                       if (g.winner_id) sessionWins[g.winner_id] = (sessionWins[g.winner_id] ?? 0) + 1
                     }
                     const allShots = sortedGames.flatMap(g => g.shots)
+                    const shotTimes = allShots.map(s => new Date(s.created_at).getTime()).filter(Boolean)
+                    const sessionDuration = shotTimes.length >= 2
+                      ? Math.floor((Math.max(...shotTimes) - Math.min(...shotTimes)) / 1000)
+                      : null
                     const sessionPlayers = Object.values(allPlayers).filter(p =>
                       sortedGames.some(g => g.player1_id === p.id || g.player2_id === p.id)
                     )
@@ -209,7 +214,10 @@ export default async function HistoryPage() {
                               {format(new Date(session.date + 'T12:00:00'), 'EEE, MMM d').toUpperCase()}
                             </p>
                             <p className="text-xs font-body text-pool-chalk-dim mt-0.5">
-                              {completedGames.length}/{sortedGames.length} games complete
+                              {completedGames.length}/{sortedGames.length} games
+                              {sessionDuration != null && sessionDuration >= 60 && (
+                                <> · {formatTime(sessionDuration)}</>
+                              )}
                             </p>
                           </div>
                           <Link

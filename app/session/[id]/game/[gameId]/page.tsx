@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import {
   fetchGame, fetchShotsForGame, fetchHistoricalShots, fetchH2H,
-  setGameResult, clearGameResult, resetGame,
+  setGameResult, clearGameResult, resetGame, updateGameMeta,
   insertShot, insertShots, deleteShot,
   type GameWithPlayers,
 } from '@/lib/queries'
@@ -470,6 +470,12 @@ export default function GamePage() {
     }
     haptic((totalColored + (breakBlack ? 1 : 0)) > 0 ? [30, 15, 30] : 20)
     setSaving(false)
+    if (game && breaker) {
+      const p1Color: 'yellow' | 'red' | undefined = breakChosenColor
+        ? (breaker === game.player1_id ? breakChosenColor : breakChosenColor === 'yellow' ? 'red' : 'yellow')
+        : undefined
+      updateGameMeta(db, gameId, { breakerId: breaker, ...(p1Color ? { player1Color: p1Color } : {}) })
+    }
     if (breakChosenColor && game) {
       const otherId = game.player1_id === breaker ? game.player2_id : game.player1_id
       setColorAssignment({ [breaker]: breakChosenColor, [otherId]: breakChosenColor === 'yellow' ? 'red' : 'yellow' })
@@ -535,7 +541,12 @@ export default function GamePage() {
   const confirmEndGame = async () => {
     if (!endGame.winnerId || saving) return
     setSaving(true)
-    await setGameResult(db, gameId, endGame.winnerId, endGame.blackBall)
+    const loserId = endGame.winnerId === p1.id ? p2.id : p1.id
+    const loserPotted = shots
+      .filter(s => s.player_id === loserId && !s.is_error)
+      .reduce((sum, s) => sum + (s.balls_potted ?? (s.potted ? 1 : 0)), 0)
+    const loserBallsRemaining = Math.max(0, 7 - loserPotted)
+    await setGameResult(db, gameId, endGame.winnerId, endGame.blackBall, loserBallsRemaining)
     haptic([80, 40, 80, 40, 150])
     setSaving(false)
     setEndGame(e => ({ ...e, open: false }))
@@ -983,7 +994,11 @@ export default function GamePage() {
                     <span className="font-body text-xs text-pool-chalk">{p1.display_name}</span>
                   </div>
                   <button
-                    onClick={() => setColorAssignment({ [p1.id]: colorAssignment[p1.id] === 'yellow' ? 'red' : 'yellow', [p2.id]: colorAssignment[p2.id] === 'yellow' ? 'red' : 'yellow' })}
+                    onClick={() => {
+                      const newP1Color: 'yellow' | 'red' = colorAssignment[p1.id] === 'yellow' ? 'red' : 'yellow'
+                      setColorAssignment({ [p1.id]: newP1Color, [p2.id]: newP1Color === 'yellow' ? 'red' : 'yellow' })
+                      updateGameMeta(db, gameId, { player1Color: newP1Color })
+                    }}
                     className="font-body text-sm text-pool-chalk-dim/50 hover:text-pool-chalk-dim transition-colors px-2"
                   >⇄</button>
                   <div className="flex items-center gap-1.5 flex-1 justify-end">
@@ -1000,6 +1015,8 @@ export default function GamePage() {
                       onClick={() => {
                         const otherId = player.id === p1.id ? p2.id : p1.id
                         setColorAssignment({ [player.id]: 'yellow', [otherId]: 'red' })
+                        const newP1Color: 'yellow' | 'red' = player.id === p1.id ? 'yellow' : 'red'
+                        updateGameMeta(db, gameId, { player1Color: newP1Color })
                       }}
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-pool-border font-body text-xs text-pool-chalk-dim hover:border-yellow-400/50 hover:text-pool-chalk transition-all active:scale-95"
                     >

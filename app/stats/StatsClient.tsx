@@ -18,6 +18,9 @@ interface RawGame {
   player2_id: string
   winner_id: string | null
   loser_potted_black: boolean
+  breaker_id: string | null
+  loser_balls_remaining: number | null
+  player1_color: 'yellow' | 'red' | null
   player1: { id: string; username: string; display_name: string }
   player2: { id: string; username: string; display_name: string }
   winner: { id: string; username: string; display_name: string } | null
@@ -156,6 +159,57 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
     breakStats[breakerUsername].games++
     breakStats[breakerUsername].best = Math.max(breakStats[breakerUsername].best, pots)
   }
+
+  // ── Break advantage (using persisted breaker_id) ────────────────────────────
+  const breakAdvantage: Record<PlayerUsername, { broke: number; wonAfterBreak: number }> = {
+    adib:   { broke: 0, wonAfterBreak: 0 },
+    ahmed:  { broke: 0, wonAfterBreak: 0 },
+    godine: { broke: 0, wonAfterBreak: 0 },
+  }
+  for (const g of games) {
+    if (!g.breaker_id || !g.winner_id) continue
+    const bu = idToUsername[g.breaker_id]
+    if (!bu || !(bu in breakAdvantage)) continue
+    breakAdvantage[bu].broke++
+    if (g.winner_id === g.breaker_id) breakAdvantage[bu].wonAfterBreak++
+  }
+  const hasBreakAdvantageData = PLAYERS.some(u => breakAdvantage[u].broke > 0)
+
+  // ── Colour win correlation ───────────────────────────────────────────────────
+  const colorWins: Record<PlayerUsername, { yW: number; yG: number; rW: number; rG: number }> = {
+    adib:   { yW: 0, yG: 0, rW: 0, rG: 0 },
+    ahmed:  { yW: 0, yG: 0, rW: 0, rG: 0 },
+    godine: { yW: 0, yG: 0, rW: 0, rG: 0 },
+  }
+  for (const g of games) {
+    if (!g.player1_color || !g.winner_id) continue
+    const p1u = g.player1.username as PlayerUsername
+    const p2u = g.player2.username as PlayerUsername
+    const p1c = g.player1_color
+    const p2c: 'yellow' | 'red' = p1c === 'yellow' ? 'red' : 'yellow'
+    const p1won = g.winner_id === g.player1_id
+    const p2won = g.winner_id === g.player2_id
+    if (p1c === 'yellow') { colorWins[p1u].yG++; if (p1won) colorWins[p1u].yW++ }
+    else                  { colorWins[p1u].rG++; if (p1won) colorWins[p1u].rW++ }
+    if (p2c === 'yellow') { colorWins[p2u].yG++; if (p2won) colorWins[p2u].yW++ }
+    else                  { colorWins[p2u].rG++; if (p2won) colorWins[p2u].rW++ }
+  }
+  const hasColorWinData = PLAYERS.some(u => colorWins[u].yG + colorWins[u].rG > 0)
+
+  // ── Margin of victory ───────────────────────────────────────────────────────
+  const marginData: Record<PlayerUsername, { total: number; count: number }> = {
+    adib:   { total: 0, count: 0 },
+    ahmed:  { total: 0, count: 0 },
+    godine: { total: 0, count: 0 },
+  }
+  for (const g of games) {
+    if (!g.winner_id || g.loser_balls_remaining == null) continue
+    const wu = idToUsername[g.winner_id]
+    if (!wu || !(wu in marginData)) continue
+    marginData[wu].total += g.loser_balls_remaining
+    marginData[wu].count++
+  }
+  const hasMarginData = PLAYERS.some(u => marginData[u].count > 0)
 
   // ── Ball Colors ─────────────────────────────────────────────────────────────
   const ballColorStats: Record<PlayerUsername, { yellows: number; reds: number }> = {
@@ -676,6 +730,102 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
                       </div>
                       <span className="font-body text-xs text-red-400 w-10 text-right">{bc.reds} 🔴</span>
                     </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── BREAK ADVANTAGE ─────────────────────────────────────────── */}
+      {hasBreakAdvantageData && (
+        <section className="px-4 py-2">
+          <SectionHeader title="BREAK ADVANTAGE" sub="win rate when you break" />
+          <div className="bg-pool-surface rounded-2xl border border-pool-border p-4 mt-3 space-y-3">
+            {PLAYERS.map(u => {
+              const ba = breakAdvantage[u]
+              if (ba.broke === 0) return null
+              const style = PLAYER_STYLES[u]
+              const pct = Math.round((ba.wonAfterBreak / ba.broke) * 100)
+              return (
+                <div key={u} className="flex items-center gap-3">
+                  <PlayerAvatar username={u} size={28} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-heading text-xs tracking-wider" style={{ color: style.color }}>{style.label.toUpperCase()}</span>
+                      <span className="font-body text-xs text-pool-chalk-dim">{ba.wonAfterBreak}W / {ba.broke} breaks</span>
+                    </div>
+                    <div className="h-1.5 bg-pool-border rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: style.color }} />
+                    </div>
+                  </div>
+                  <span className="font-heading text-xl text-pool-chalk tabular-nums w-12 text-right">{pct}%</span>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ── COLOUR ADVANTAGE ─────────────────────────────────────────── */}
+      {hasColorWinData && (
+        <section className="px-4 py-2">
+          <SectionHeader title="COLOUR ADVANTAGE" sub="win rate by colour" />
+          <div className="bg-pool-surface rounded-2xl border border-pool-border p-4 mt-3 space-y-4">
+            {PLAYERS.map(u => {
+              const cw = colorWins[u]
+              if (cw.yG + cw.rG === 0) return null
+              const style = PLAYER_STYLES[u]
+              const yPct = cw.yG > 0 ? Math.round((cw.yW / cw.yG) * 100) : null
+              const rPct = cw.rG > 0 ? Math.round((cw.rW / cw.rG) * 100) : null
+              return (
+                <div key={u}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <PlayerAvatar username={u} size={22} />
+                    <span className="font-heading text-xs tracking-wider" style={{ color: style.color }}>{style.label.toUpperCase()}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-pool-bg rounded-xl p-3 border border-pool-border">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <div className="w-2.5 h-2.5 rounded-full bg-yellow-400 shrink-0" />
+                        <span className="font-body text-xs text-pool-chalk-dim">Yellow</span>
+                      </div>
+                      <p className="font-heading text-xl text-pool-chalk">{yPct !== null ? `${yPct}%` : '—'}</p>
+                      <p className="font-body text-[10px] text-pool-chalk-dim">{cw.yW}W · {cw.yG - cw.yW}L</p>
+                    </div>
+                    <div className="bg-pool-bg rounded-xl p-3 border border-pool-border">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <div className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" />
+                        <span className="font-body text-xs text-pool-chalk-dim">Red</span>
+                      </div>
+                      <p className="font-heading text-xl text-pool-chalk">{rPct !== null ? `${rPct}%` : '—'}</p>
+                      <p className="font-body text-[10px] text-pool-chalk-dim">{cw.rW}W · {cw.rG - cw.rW}L</p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ── MARGIN OF VICTORY ───────────────────────────────────────── */}
+      {hasMarginData && (
+        <section className="px-4 py-2">
+          <SectionHeader title="MARGIN OF VICTORY" sub="avg balls left for loser" />
+          <div className="bg-pool-surface rounded-2xl border border-pool-border p-4 mt-3">
+            <div className={`grid grid-cols-${PLAYERS.filter(u => marginData[u].count > 0).length} divide-x divide-pool-border`}>
+              {PLAYERS.filter(u => marginData[u].count > 0).map(u => {
+                const md = marginData[u]
+                const style = PLAYER_STYLES[u]
+                const avg = (md.total / md.count).toFixed(1)
+                return (
+                  <div key={u} className="text-center px-3">
+                    <PlayerAvatar username={u} size={32} className="mx-auto mb-1" />
+                    <p className="font-heading text-2xl text-pool-chalk">{avg}</p>
+                    <p className="font-body text-[10px]" style={{ color: style.color }}>{style.label}</p>
+                    <p className="font-body text-[10px] text-pool-chalk-dim">{md.count} wins</p>
                   </div>
                 )
               })}

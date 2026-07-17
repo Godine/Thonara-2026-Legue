@@ -29,6 +29,7 @@ export async function fetchCompletedGames(db: SupabaseClient) {
     .from('games')
     .select(`
       id, game_number, session_id, player1_id, player2_id, winner_id, loser_potted_black,
+      breaker_id, loser_balls_remaining, player1_color,
       player1:players!games_player1_id_fkey (id, username, display_name),
       player2:players!games_player2_id_fkey (id, username, display_name),
       winner:players!games_winner_id_fkey  (id, username, display_name),
@@ -65,16 +66,30 @@ export async function fetchH2H(
   return { p1Wins, p2Wins }
 }
 
+export async function updateGameMeta(
+  db: SupabaseClient,
+  gameId: string,
+  patch: { breakerId?: string; player1Color?: 'yellow' | 'red' },
+) {
+  const update: Record<string, unknown> = {}
+  if (patch.breakerId !== undefined)   update.breaker_id    = patch.breakerId
+  if (patch.player1Color !== undefined) update.player1_color = patch.player1Color
+  if (Object.keys(update).length === 0) return
+  await db.from('games').update(update).eq('id', gameId)
+}
+
 export async function setGameResult(
   db: SupabaseClient,
   gameId: string,
   winnerId: string,
   blackBall: boolean,
+  loserBallsRemaining?: number,
 ) {
   await db.from('games').update({
     winner_id: winnerId,
     loser_potted_black: blackBall,
     is_complete: true,
+    ...(loserBallsRemaining !== undefined ? { loser_balls_remaining: loserBallsRemaining } : {}),
   }).eq('id', gameId)
 }
 
@@ -83,6 +98,7 @@ export async function clearGameResult(db: SupabaseClient, gameId: string) {
     winner_id: null,
     is_complete: false,
     loser_potted_black: false,
+    loser_balls_remaining: null,
   }).eq('id', gameId)
 }
 
