@@ -160,32 +160,48 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
     breakStats[breakerUsername].best = Math.max(breakStats[breakerUsername].best, pots)
   }
 
-  // ── Break advantage (using persisted breaker_id) ────────────────────────────
+  // ── Break advantage — uses persisted breaker_id, falls back to first shot ───
   const breakAdvantage: Record<PlayerUsername, { broke: number; wonAfterBreak: number }> = {
     adib:   { broke: 0, wonAfterBreak: 0 },
     ahmed:  { broke: 0, wonAfterBreak: 0 },
     godine: { broke: 0, wonAfterBreak: 0 },
   }
   for (const g of games) {
-    if (!g.breaker_id || !g.winner_id) continue
-    const bu = idToUsername[g.breaker_id]
+    if (!g.winner_id) continue
+    const gameShots = shotsByGame.get(g.id) ?? []
+    const breakerId = g.breaker_id ?? (gameShots.length > 0
+      ? [...gameShots].sort((a, b) => a.shot_number - b.shot_number)[0].player_id
+      : null)
+    if (!breakerId) continue
+    const bu = idToUsername[breakerId]
     if (!bu || !(bu in breakAdvantage)) continue
     breakAdvantage[bu].broke++
-    if (g.winner_id === g.breaker_id) breakAdvantage[bu].wonAfterBreak++
+    if (g.winner_id === breakerId) breakAdvantage[bu].wonAfterBreak++
   }
   const hasBreakAdvantageData = PLAYERS.some(u => breakAdvantage[u].broke > 0)
 
-  // ── Colour win correlation ───────────────────────────────────────────────────
+  // ── Colour win correlation — uses persisted player1_color, falls back to shots
   const colorWins: Record<PlayerUsername, { yW: number; yG: number; rW: number; rG: number }> = {
     adib:   { yW: 0, yG: 0, rW: 0, rG: 0 },
     ahmed:  { yW: 0, yG: 0, rW: 0, rG: 0 },
     godine: { yW: 0, yG: 0, rW: 0, rG: 0 },
   }
   for (const g of games) {
-    if (!g.player1_color || !g.winner_id) continue
+    if (!g.winner_id) continue
     const p1u = g.player1.username as PlayerUsername
     const p2u = g.player2.username as PlayerUsername
-    const p1c = g.player1_color
+    let p1c: 'yellow' | 'red' | null = g.player1_color ?? null
+    if (!p1c) {
+      // derive from shot ball_color for this game
+      const gs = shotsByGame.get(g.id) ?? []
+      const p1y = gs.filter(s => s.player_id === g.player1_id && s.ball_color === 'yellow').length
+      const p1r = gs.filter(s => s.player_id === g.player1_id && s.ball_color === 'red').length
+      const p2y = gs.filter(s => s.player_id === g.player2_id && s.ball_color === 'yellow').length
+      const p2r = gs.filter(s => s.player_id === g.player2_id && s.ball_color === 'red').length
+      if (p1y > p1r && p2r > p2y) p1c = 'yellow'
+      else if (p1r > p1y && p2y > p2r) p1c = 'red'
+    }
+    if (!p1c) continue
     const p2c: 'yellow' | 'red' = p1c === 'yellow' ? 'red' : 'yellow'
     const p1won = g.winner_id === g.player1_id
     const p2won = g.winner_id === g.player2_id
@@ -196,17 +212,28 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
   }
   const hasColorWinData = PLAYERS.some(u => colorWins[u].yG + colorWins[u].rG > 0)
 
-  // ── Margin of victory ───────────────────────────────────────────────────────
+  // ── Margin of victory — uses persisted loser_balls_remaining, falls back to shots
   const marginData: Record<PlayerUsername, { total: number; count: number }> = {
     adib:   { total: 0, count: 0 },
     ahmed:  { total: 0, count: 0 },
     godine: { total: 0, count: 0 },
   }
   for (const g of games) {
-    if (!g.winner_id || g.loser_balls_remaining == null) continue
+    if (!g.winner_id) continue
     const wu = idToUsername[g.winner_id]
     if (!wu || !(wu in marginData)) continue
-    marginData[wu].total += g.loser_balls_remaining
+    let ballsLeft: number
+    if (g.loser_balls_remaining != null) {
+      ballsLeft = g.loser_balls_remaining
+    } else {
+      const loserId = g.winner_id === g.player1_id ? g.player2_id : g.player1_id
+      const gs = shotsByGame.get(g.id) ?? []
+      const loserPotted = gs
+        .filter(s => s.player_id === loserId && !s.is_error)
+        .reduce((sum, s) => sum + ((s as any).balls_potted ?? (s.potted ? 1 : 0)), 0)
+      ballsLeft = Math.max(0, 7 - loserPotted)
+    }
+    marginData[wu].total += ballsLeft
     marginData[wu].count++
   }
   const hasMarginData = PLAYERS.some(u => marginData[u].count > 0)
@@ -815,14 +842,14 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
         <section className="px-4 py-2">
           <SectionHeader title="MARGIN OF VICTORY" sub="avg balls left for loser" />
           <div className="bg-pool-surface rounded-2xl border border-pool-border p-4 mt-3">
-            <div className={`grid grid-cols-${PLAYERS.filter(u => marginData[u].count > 0).length} divide-x divide-pool-border`}>
+            <div className="grid grid-cols-3 divide-x divide-pool-border">
               {PLAYERS.filter(u => marginData[u].count > 0).map(u => {
                 const md = marginData[u]
                 const style = PLAYER_STYLES[u]
                 const avg = (md.total / md.count).toFixed(1)
                 return (
                   <div key={u} className="text-center px-3">
-                    <PlayerAvatar username={u} size={32} className="mx-auto mb-1" />
+                    <div className="flex justify-center mb-1"><PlayerAvatar username={u} size={32} /></div>
                     <p className="font-heading text-2xl text-pool-chalk">{avg}</p>
                     <p className="font-body text-[10px]" style={{ color: style.color }}>{style.label}</p>
                     <p className="font-body text-[10px] text-pool-chalk-dim">{md.count} wins</p>
