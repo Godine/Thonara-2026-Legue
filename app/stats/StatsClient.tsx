@@ -152,8 +152,9 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
     let pots = 0
     for (const s of sorted) {
       if (s.player_id !== breakerId) break
-      if (!s.potted) break
-      pots++
+      const scored = s.balls_potted != null ? s.balls_potted : (s.potted ? 1 : 0)
+      if (scored === 0) break
+      pots += scored
     }
     breakStats[breakerUsername].total += pots
     breakStats[breakerUsername].games++
@@ -390,9 +391,11 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
 
   // Biggest single-game win margin (loser had the most balls left)
   let biggestMarginWinner: PlayerUsername | null = null
-  let biggestMarginBalls = 0
+  let biggestMarginBalls = -1
   for (const g of games) {
     if (!g.winner_id) continue
+    const wu = idToUsername[g.winner_id]
+    if (!wu) continue
     let ballsLeft: number
     if (g.loser_balls_remaining != null) {
       ballsLeft = g.loser_balls_remaining
@@ -404,15 +407,15 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
         .reduce((sum, s) => sum + ((s as any).balls_potted ?? (s.potted ? 1 : 0)), 0)
       ballsLeft = Math.max(0, 7 - loserPotted)
     }
-    if (ballsLeft > biggestMarginBalls) {
+    if (biggestMarginWinner === null || ballsLeft > biggestMarginBalls) {
       biggestMarginBalls = ballsLeft
-      biggestMarginWinner = idToUsername[g.winner_id] ?? null
+      biggestMarginWinner = wu
     }
   }
 
-  // Best break win rate (minimum 3 breaks to qualify)
+  // Best break win rate (minimum 1 break to qualify)
   const bestBreakWinRatePlayer = PLAYERS
-    .filter(u => breakAdvantage[u].broke >= 3)
+    .filter(u => breakAdvantage[u].broke >= 1)
     .reduce<PlayerUsername | null>((best, u) => {
       if (!best) return u
       const rate = breakAdvantage[u].wonAfterBreak / breakAdvantage[u].broke
@@ -618,13 +621,13 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
             <RecordCard icon="🖤" label="Gifted Wins" username={mostBlackPlayer}
               value={`${playerMap[mostBlackPlayer].blackBallIncidents}×`} sub="potted the black" />
           )}
-          {breakStats[bestBreakPlayer].best > 0 && (
-            <RecordCard icon="🎱" label="Best Break" username={bestBreakPlayer}
-              value={`${breakStats[bestBreakPlayer].best} balls`} sub="most pots on a single break" />
-          )}
-          {biggestMarginWinner && biggestMarginBalls > 0 && (
+          <RecordCard icon="🎱" label="Best Break" username={bestBreakPlayer}
+            value={breakStats[bestBreakPlayer].best > 0 ? `${breakStats[bestBreakPlayer].best} ball${breakStats[bestBreakPlayer].best !== 1 ? 's' : ''}` : '—'}
+            sub="most pots on a single break" />
+          {biggestMarginWinner && (
             <RecordCard icon="💪" label="Biggest Win" username={biggestMarginWinner}
-              value={`${biggestMarginBalls} left`} sub="opponent balls still on table" />
+              value={biggestMarginBalls > 0 ? `${biggestMarginBalls} left` : '—'}
+              sub="opponent balls still on table" />
           )}
           {bestBreakWinRatePlayer && (
             <RecordCard icon="🔨" label="Break King" username={bestBreakWinRatePlayer}
