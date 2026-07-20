@@ -1228,27 +1228,23 @@ export default function GamePage() {
               ))}
             </div>
 
-            {/* Own balls (only relevant for in-off / scratch) */}
-            {inoffPopup.cueBallIn && (
-              <>
-                <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-2">Own balls also potted</p>
-                <div className="flex gap-3 mb-4">
-                  {[0, 1, 2, 3].map(n => (
-                    <button
-                      key={n}
-                      onClick={() => setInoffPopup(p => p ? { ...p, ownBalls: n } : p)}
-                      className={`flex-1 py-3.5 rounded-xl border-2 font-heading text-2xl transition-all active:scale-95 ${
-                        inoffPopup.ownBalls === n
-                          ? 'border-violet-400 bg-violet-400/20 text-violet-300'
-                          : 'border-pool-border text-pool-chalk-dim hover:border-violet-400/40'
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+            {/* Own balls potted */}
+            <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-2">Your balls potted</p>
+            <div className="flex gap-3 mb-4">
+              {[0, 1, 2, 3].map(n => (
+                <button
+                  key={n}
+                  onClick={() => setInoffPopup(p => p ? { ...p, ownBalls: n } : p)}
+                  className={`flex-1 py-3.5 rounded-xl border-2 font-heading text-2xl transition-all active:scale-95 ${
+                    inoffPopup.ownBalls === n
+                      ? 'border-violet-400 bg-violet-400/20 text-violet-300'
+                      : 'border-pool-border text-pool-chalk-dim hover:border-violet-400/40'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
 
             <div className="flex gap-3 mt-2">
               <button
