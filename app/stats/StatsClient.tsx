@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { PLAYER_STYLES, PLAYERS, type PlayerUsername } from '@/lib/game-config'
 import PlayerBall from '@/components/PlayerBall'
@@ -603,7 +604,12 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
 
       {/* ── RECORDS ─────────────────────────────────────────────────── */}
       <section className="px-4 py-2">
-        <SectionHeader title="RECORDS" />
+        <div className="flex items-center justify-between">
+          <SectionHeader title="RECORDS" />
+          <Link href="/records" className="font-body text-xs text-pool-gold hover:text-pool-gold-light transition-colors shrink-0 ml-3">
+            View all →
+          </Link>
+        </div>
         <div className="grid grid-cols-2 gap-2 mt-3">
           {recordAccuracy[bestAccPlayer] > 0 && (
             <RecordCard icon="🎯" label="Peak Accuracy" username={bestAccPlayer}
