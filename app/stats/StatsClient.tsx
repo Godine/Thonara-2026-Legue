@@ -385,6 +385,41 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
   const mostPotsPlayer  = PLAYERS.reduce((b, u) => recordPots[u] > recordPots[b] ? u : b, PLAYERS[0])
   const mostBlackPlayer = PLAYERS.reduce((b, u) => playerMap[u].blackBallIncidents > playerMap[b].blackBallIncidents ? u : b, PLAYERS[0])
 
+  // Best single-game break (most balls potted on the break)
+  const bestBreakPlayer = PLAYERS.reduce((b, u) => breakStats[u].best > breakStats[b].best ? u : b, PLAYERS[0])
+
+  // Biggest single-game win margin (loser had the most balls left)
+  let biggestMarginWinner: PlayerUsername | null = null
+  let biggestMarginBalls = 0
+  for (const g of games) {
+    if (!g.winner_id) continue
+    let ballsLeft: number
+    if (g.loser_balls_remaining != null) {
+      ballsLeft = g.loser_balls_remaining
+    } else {
+      const loserId = g.winner_id === g.player1_id ? g.player2_id : g.player1_id
+      const gs = shotsByGame.get(g.id) ?? []
+      const loserPotted = gs
+        .filter(s => s.player_id === loserId && !s.is_error)
+        .reduce((sum, s) => sum + ((s as any).balls_potted ?? (s.potted ? 1 : 0)), 0)
+      ballsLeft = Math.max(0, 7 - loserPotted)
+    }
+    if (ballsLeft > biggestMarginBalls) {
+      biggestMarginBalls = ballsLeft
+      biggestMarginWinner = idToUsername[g.winner_id] ?? null
+    }
+  }
+
+  // Best break win rate (minimum 3 breaks to qualify)
+  const bestBreakWinRatePlayer = PLAYERS
+    .filter(u => breakAdvantage[u].broke >= 3)
+    .reduce<PlayerUsername | null>((best, u) => {
+      if (!best) return u
+      const rate = breakAdvantage[u].wonAfterBreak / breakAdvantage[u].broke
+      const bestRate = breakAdvantage[best].wonAfterBreak / breakAdvantage[best].broke
+      return rate > bestRate ? u : best
+    }, null)
+
   // Podium order: 2nd left · 1st centre · 3rd right
   const podium     = [standings[1], standings[0], standings[2]].filter(Boolean)
   const podiumRank = [2, 1, 3] as const
@@ -582,6 +617,19 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
           {playerMap[mostBlackPlayer].blackBallIncidents > 0 && (
             <RecordCard icon="🖤" label="Gifted Wins" username={mostBlackPlayer}
               value={`${playerMap[mostBlackPlayer].blackBallIncidents}×`} sub="potted the black" />
+          )}
+          {breakStats[bestBreakPlayer].best > 0 && (
+            <RecordCard icon="🎱" label="Best Break" username={bestBreakPlayer}
+              value={`${breakStats[bestBreakPlayer].best} balls`} sub="most pots on a single break" />
+          )}
+          {biggestMarginWinner && biggestMarginBalls > 0 && (
+            <RecordCard icon="💪" label="Biggest Win" username={biggestMarginWinner}
+              value={`${biggestMarginBalls} left`} sub="opponent balls still on table" />
+          )}
+          {bestBreakWinRatePlayer && (
+            <RecordCard icon="🔨" label="Break King" username={bestBreakWinRatePlayer}
+              value={`${Math.round((breakAdvantage[bestBreakWinRatePlayer].wonAfterBreak / breakAdvantage[bestBreakWinRatePlayer].broke) * 100)}%`}
+              sub={`wins after breaking · ${breakAdvantage[bestBreakWinRatePlayer].broke} breaks`} />
           )}
         </div>
       </section>
