@@ -346,20 +346,26 @@ export default function StatsClient({ games: _games, shots }: { games: RawGame[]
     }
   })
 
-  const accuracyTrend = sessionOrder.map(sid => {
-    const sessionGameIds = new Set(games.filter(g => g.session_id === sid).map(g => g.id))
-    const sessionShots = shots.filter(s => sessionGameIds.has(s.game_id))
-    const session = games.find(g => g.session_id === sid)?.session
-    const label = session ? format(parseISO(session.date), 'd MMM') : sid.slice(0, 4)
-    const entry: Record<string, number | string | null> = { label }
-    for (const u of PLAYERS) {
-      const pid = playerIdMap[u]
-      if (!pid) { entry[u] = null; continue }
-      const myShots = sessionShots.filter(s => s.player_id === pid)
-      entry[u] = myShots.length > 0 ? Math.round((myShots.filter(s => s.potted).length / myShots.length) * 100) : null
-    }
-    return entry
-  })
+  const ACCURACY_TRACKING_START = '2026-04-23'
+  const accuracyTrend = sessionOrder
+    .filter(sid => {
+      const date = games.find(g => g.session_id === sid)?.session?.date ?? ''
+      return date >= ACCURACY_TRACKING_START
+    })
+    .map(sid => {
+      const sessionGameIds = new Set(games.filter(g => g.session_id === sid).map(g => g.id))
+      const sessionShots = shots.filter(s => sessionGameIds.has(s.game_id))
+      const session = games.find(g => g.session_id === sid)?.session
+      const label = session ? format(parseISO(session.date), 'd MMM') : sid.slice(0, 4)
+      const entry: Record<string, number | string | null> = { label }
+      for (const u of PLAYERS) {
+        const pid = playerIdMap[u]
+        if (!pid) { entry[u] = null; continue }
+        const myShots = sessionShots.filter(s => s.player_id === pid)
+        entry[u] = myShots.length > 0 ? Math.round((myShots.filter(s => s.potted).length / myShots.length) * 100) : null
+      }
+      return entry
+    })
 
   const byGameNum: Record<number, Record<string, number>> = {}
   for (let n = 1; n <= 6; n++) byGameNum[n] = { adib: 0, ahmed: 0, godine: 0 }
