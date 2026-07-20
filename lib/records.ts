@@ -8,6 +8,8 @@ type RawGame = {
   player2_id: string
   winner_id: string | null
   loser_potted_black: boolean
+  breaker_id?: string | null
+  loser_balls_remaining?: number | null
   player1: { id: string; username: string }
   player2: { id: string; username: string }
   session: { id: string; date: string }
@@ -225,6 +227,50 @@ export function computeRecords(games: RawGame[], shots: RawShot[]): RecordSectio
   }
   const hottestBreak = pickRecord(bestPerPlayer(breakCandidates), v => `${v}`)
 
+  // ── Biggest Win (most balls left for the loser) ───────────────────────────
+  const marginCandidates: Candidate[] = []
+  for (const g of sorted) {
+    if (!g.winner_id) continue
+    const wu = idToUser.get(g.winner_id)
+    if (!wu) continue
+    let ballsLeft: number
+    if (g.loser_balls_remaining != null) {
+      ballsLeft = g.loser_balls_remaining
+    } else {
+      const loserId = g.winner_id === g.player1_id ? g.player2_id : g.player1_id
+      const gs = shotsByGame.get(g.id) ?? []
+      const loserPotted = gs
+        .filter(s => s.player_id === loserId && !s.is_error)
+        .reduce((sum, s) => sum + (s.balls_potted ?? (s.potted ? 1 : 0)), 0)
+      ballsLeft = Math.max(0, 7 - loserPotted)
+    }
+    if (ballsLeft > 0) marginCandidates.push({ username: wu, value: ballsLeft, context: oppLabel(g.winner_id, g) })
+  }
+  const biggestWin = pickRecord(bestPerPlayer(marginCandidates), v => `${v} left`)
+
+  // ── Break King (best win rate after breaking, min 3 breaks) ──────────────
+  const breakWins: Record<PlayerUsername, { broke: number; won: number }> = {
+    adib: { broke: 0, won: 0 }, ahmed: { broke: 0, won: 0 }, godine: { broke: 0, won: 0 },
+  }
+  for (const g of sorted) {
+    if (!g.winner_id) continue
+    const gs = (shotsByGame.get(g.id) ?? []).sort((a, b) => a.shot_number - b.shot_number)
+    const breakerId = g.breaker_id ?? (gs.length > 0 ? gs[0].player_id : null)
+    if (!breakerId) continue
+    const bu = idToUser.get(breakerId)
+    if (!bu || !(bu in breakWins)) continue
+    breakWins[bu].broke++
+    if (g.winner_id === breakerId) breakWins[bu].won++
+  }
+  const breakKingCandidates = PLAYERS
+    .filter(u => breakWins[u].broke >= 3)
+    .map(u => ({
+      username: u,
+      value: Math.round((breakWins[u].won / breakWins[u].broke) * 100),
+      context: `${breakWins[u].won}W / ${breakWins[u].broke} breaks`,
+    }))
+  const breakKing = pickRecord(breakKingCandidates, v => `${v}%`)
+
   // ── Streaks ───────────────────────────────────────────────────────────────
 
   function longestStreak(pid: string, win: boolean): number {
@@ -293,6 +339,7 @@ export function computeRecords(games: RawGame[], shots: RawShot[]): RecordSectio
       records: [
         { id: 'best_game_acc',    icon: '🎯', title: 'Best Game Accuracy',   description: 'Highest pot rate in one game (min 7 shots)',            ...bestGameAcc },
         { id: 'hottest_break',    icon: '💥', title: 'Hottest Break',        description: 'Most consecutive pots from the opening break',          ...hottestBreak },
+        { id: 'biggest_win',      icon: '💪', title: 'Biggest Win',          description: 'Most opponent balls still on table at the end',          ...biggestWin },
         { id: 'fastest_win',      icon: '⚡', title: 'Speed Run',            description: 'Fastest game won, first shot to last',                  ...fastestWin },
         { id: 'fewest_shots_win', icon: '🏹', title: 'Lethal Efficiency',    description: 'Fewest shots taken to win a game',                      ...fewestShotsWin },
         { id: 'most_game_shots',  icon: '⚙️', title: 'Most Shots in a Game', description: 'Most shots taken by one player in a single game',      ...mostGameShots },
@@ -303,6 +350,7 @@ export function computeRecords(games: RawGame[], shots: RawShot[]): RecordSectio
       records: [
         { id: 'win_streak',  icon: '🔥', title: 'Longest Win Streak',    description: 'Most consecutive wins ever',    ...longestWinStreak },
         { id: 'lose_streak', icon: '😭', title: 'Longest Losing Streak', description: 'Most consecutive losses ever', ...longestLoseStreak, shameful: true },
+        { id: 'break_king',  icon: '🔨', title: 'Break King',            description: 'Highest win rate when breaking (min 3 breaks)', ...breakKing },
       ],
     },
     {
