@@ -16,6 +16,8 @@ export async function fetchAllShots(db: SupabaseClient): Promise<Shot[]> {
   const { data } = await db
     .from('shots')
     .select('id, game_id, player_id, potted, balls_potted, opponent_balls_potted, ball_color, is_lucky, is_error, shot_number, created_at')
+    .order('created_at', { ascending: true })
+    .limit(10000)
   return (data as Shot[]) ?? []
 }
 
