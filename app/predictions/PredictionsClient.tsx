@@ -135,12 +135,6 @@ export default function PredictionsClient({ games, shots }: { games: RawGame[]; 
       return (wAt * atProb + wRe * reProb + wAc * acProb) / total
     }
 
-    // Default weights (sum = 100)
-    const DEF = { at: 30, re: 40, ac: 30 }
-    const pAA = modelProb('adib', 'ahmed',  DEF.at, DEF.re, DEF.ac)
-    const pAG = modelProb('adib', 'godine', DEF.at, DEF.re, DEF.ac)
-    const pHG = modelProb('ahmed', 'godine', DEF.at, DEF.re, DEF.ac)
-
     // Historical cumulative wins per session (for chart actual lines)
     type SessionPt = { games: number; label: string; adib: number; ahmed: number; godine: number }
     const sessionPoints: SessionPt[] = [{ games: 0, label: 'Start', adib: 0, ahmed: 0, godine: 0 }]
@@ -159,31 +153,19 @@ export default function PredictionsClient({ games, shots }: { games: RawGame[]; 
       sessionPoints.push({ games: runGames, label: `S${i + 1}`, adib: cumW.adib, ahmed: cumW.ahmed, godine: cumW.godine })
     }
 
-    return {
-      totalPlayed, current, h2h, rh2h, acc,
-      pAA, pAG, pHG,
-      sessionPoints,
-      modelProb,
-      RECENT_N,
-    }
+    return { totalPlayed, current, h2h, rh2h, sessionPoints, modelProb, RECENT_N }
   }, [games, shots])
 
   // ── Simulation state ─────────────────────────────────────────────────────
-  // Match win-probability overrides (null = use model value)
-  const [simAAraw, setSimAA] = useState<number | null>(null) // adib vs ahmed %
-  const [simAGraw, setSimAG] = useState<number | null>(null) // adib vs godine %
-  const [simHGraw, setSimHG] = useState<number | null>(null) // ahmed vs godine %
+  const [simAAraw, setSimAA] = useState<number | null>(null)
+  const [simAGraw, setSimAG] = useState<number | null>(null)
+  const [simHGraw, setSimHG] = useState<number | null>(null)
   const [totalTarget, setTotalTarget] = useState(DEFAULT_TOTAL)
-  // Model weight controls (sum needn't equal 100 — normalised inside modelProb)
-  const [wAt, setWAt] = useState(30) // all-time H2H weight
-  const [wRe, setWRe] = useState(40) // recent form weight
-  const [wAc, setWAc] = useState(30) // accuracy weight
+  const [wAt, setWAt] = useState(30)
+  const [wRe, setWRe] = useState(40)
+  const [wAc, setWAc] = useState(30)
 
-  const isSimulating = simAAraw !== null || simAGraw !== null || simHGraw !== null
-    || totalTarget !== DEFAULT_TOTAL
-    || wAt !== 30 || wRe !== 40 || wAc !== 30
-
-  // Recompute model probabilities with current weight settings
+  // Model probabilities with current weight settings
   const modelPAA = useMemo(() => model.modelProb('adib', 'ahmed',  wAt, wRe, wAc), [model, wAt, wRe, wAc])
   const modelPAG = useMemo(() => model.modelProb('adib', 'godine', wAt, wRe, wAc), [model, wAt, wRe, wAc])
   const modelPHG = useMemo(() => model.modelProb('ahmed', 'godine', wAt, wRe, wAc), [model, wAt, wRe, wAc])
@@ -192,10 +174,13 @@ export default function PredictionsClient({ games, shots }: { games: RawGame[]; 
   const modelAGr = Math.round(modelPAG * 100)
   const modelHGr = Math.round(modelPHG * 100)
 
-  // Effective probabilities: user override takes precedence over model
   const simAA = simAAraw ?? modelAAr
   const simAG = simAGraw ?? modelAGr
   const simHG = simHGraw ?? modelHGr
+
+  const isSimulating = simAAraw !== null || simAGraw !== null || simHGraw !== null
+    || totalTarget !== DEFAULT_TOTAL
+    || wAt !== 30 || wRe !== 40 || wAc !== 30
 
   const effAA = simAA / 100
   const effAG = simAG / 100
@@ -213,7 +198,6 @@ export default function PredictionsClient({ games, shots }: { games: RawGame[]; 
   const ranked = PLAYERS.slice().sort((a, b) => projected[b] - projected[a])
   const champion = ranked[0]
 
-  // ── Chart data ──────────────────────────────────────────────────────────
   const chartData = [
     ...model.sessionPoints.map((p, i) => {
       const isLast = i === model.sessionPoints.length - 1
@@ -248,18 +232,18 @@ export default function PredictionsClient({ games, shots }: { games: RawGame[]; 
     { a: 'ahmed' as PlayerUsername, b: 'godine' as PlayerUsername, simVal: simHG, modelVal: modelHGr, setVal: setSimHG },
   ]
 
-  function resetAll() {
-    setSimAA(null); setSimAG(null); setSimHG(null)
-    setTotalTarget(DEFAULT_TOTAL)
-    setWAt(30); setWRe(40); setWAc(30)
-  }
-
   const xTicks = useMemo(() => {
     const base = [0, Math.round(totalTarget * 0.25), Math.round(totalTarget * 0.5), Math.round(totalTarget * 0.75), totalTarget]
     if (Math.abs(model.totalPlayed - base[1]) > 8 && Math.abs(model.totalPlayed - base[2]) > 8 && Math.abs(model.totalPlayed - base[3]) > 8)
       base.splice(base.length - 1, 0, model.totalPlayed)
     return Array.from(new Set(base)).sort((a, b) => a - b)
   }, [totalTarget, model.totalPlayed])
+
+  function resetAll() {
+    setSimAA(null); setSimAG(null); setSimHG(null)
+    setTotalTarget(DEFAULT_TOTAL)
+    setWAt(30); setWRe(40); setWAc(30)
+  }
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -304,121 +288,7 @@ export default function PredictionsClient({ games, shots }: { games: RawGame[]; 
         </div>
       </div>
 
-      {/* Champion hero */}
-      <div className="px-4 mb-5">
-        <div className="bg-pool-surface border border-pool-border rounded-xl p-5 text-center">
-          <p className="font-body text-xs text-pool-chalk-dim uppercase tracking-widest mb-3">
-            {isSimulating ? 'Simulated Champion' : 'Predicted Champion'}
-          </p>
-          <div className="flex justify-center mb-3">
-            <div className="relative inline-block">
-              <PlayerAvatar username={champion} size={72} />
-              <span className="absolute -top-1 -right-2 text-2xl leading-none">🏆</span>
-            </div>
-          </div>
-          <p className="font-heading text-3xl" style={{ color: PC[champion] }}>
-            {PLAYER_STYLES[champion].label}
-          </p>
-          <p className="font-body text-pool-chalk-dim text-sm mt-1.5">
-            Projected{' '}
-            <span className="font-heading text-2xl text-pool-chalk">~{Math.round(projected[champion])}</span>
-            {' '}wins at game {totalTarget}
-          </p>
-          <p className="font-body text-xs text-pool-chalk-dim mt-1">
-            {model.current[champion]} wins now · +{Math.round(projected[champion] - model.current[champion])} expected from {effectiveRemaining} remaining
-          </p>
-        </div>
-      </div>
-
-      {/* Chart */}
-      <div className="px-4 mb-5">
-        <div className="bg-pool-surface border border-pool-border rounded-xl p-4">
-          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-4">WINS RACE TO {totalTarget}</p>
-          <ResponsiveContainer width="100%" height={210}>
-            <LineChart data={chartData} margin={{ top: 5, right: 16, bottom: 0, left: -14 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f3525" />
-              <XAxis
-                dataKey="games"
-                type="number"
-                domain={[0, totalTarget]}
-                ticks={xTicks}
-                stroke="#7a786f"
-                tick={{ fontSize: 10, fill: '#7a786f' }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => v === totalTarget ? `${v}🎯` : String(v)}
-              />
-              <YAxis
-                stroke="#7a786f"
-                tick={{ fontSize: 10, fill: '#7a786f' }}
-                tickLine={false}
-                axisLine={false}
-                width={28}
-              />
-              <ReTooltip
-                contentStyle={{ background: '#0e1e12', border: '1px solid #1f3525', borderRadius: 8, fontSize: 11, fontFamily: 'inherit' }}
-                labelFormatter={(v) => v === totalTarget ? `🎯 Game ${totalTarget} (${isSimulating ? 'simulated' : 'projected'})` : `Game ${v}`}
-                formatter={(value, name) => {
-                  const base = (name as string).replace('_p', '') as PlayerUsername
-                  const isProj = (name as string).endsWith('_p')
-                  return [`${Math.round(value as number)} wins${isProj ? (isSimulating ? ' (sim.)' : ' (proj.)') : ''}`, PLAYER_STYLES[base]?.label ?? String(name)]
-                }}
-              />
-              <ReferenceLine x={model.totalPlayed} stroke="#c9a22760" strokeDasharray="4 2"
-                label={{ value: 'now', position: 'insideTopRight', fontSize: 9, fill: '#c9a227', dy: 2 }}
-              />
-              {PLAYERS.map(u => (
-                <Line key={u} type="monotone" dataKey={u} stroke={PC[u]} strokeWidth={2.5}
-                  dot={false} connectNulls={false} isAnimationActive={false} />
-              ))}
-              {PLAYERS.map(u => (
-                <Line key={`${u}_p`} type="monotone" dataKey={`${u}_p`} stroke={PC[u]} strokeWidth={2}
-                  strokeDasharray="6 4" dot={false} connectNulls={false} isAnimationActive={false} opacity={0.65} />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-          <div className="flex gap-4 mt-2 justify-center flex-wrap">
-            {PLAYERS.map(u => (
-              <div key={u} className="flex items-center gap-1.5">
-                <div className="w-4 h-0.5 rounded" style={{ background: PC[u] }} />
-                <span className="font-body text-xs text-pool-chalk-dim">{PLAYER_STYLES[u].label}</span>
-              </div>
-            ))}
-            <div className="flex items-center gap-1.5">
-              <svg width="16" height="4"><line x1="0" y1="2" x2="16" y2="2" stroke="#7a786f" strokeWidth="2" strokeDasharray="4 3" /></svg>
-              <span className="font-body text-xs text-pool-chalk-dim">{isSimulating ? 'simulated' : 'projected'}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Projected podium */}
-      <div className="px-4 mb-5">
-        <div className="bg-pool-surface border border-pool-border rounded-xl p-4">
-          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-4">
-            {isSimulating ? 'SIMULATED' : 'PROJECTED'} PODIUM AT GAME {totalTarget}
-          </p>
-          <div className="flex items-end justify-center gap-3">
-            {podiumSlots.map(({ u, rank, emoji, barH }) => (
-              <div key={u} className="flex flex-col items-center">
-                <div className="mb-2">
-                  <PlayerAvatar username={u} size={rank === 1 ? 60 : 44} />
-                </div>
-                <div className="text-center mb-2">
-                  <div className="text-xl leading-none">{emoji}</div>
-                  <div className="font-heading text-sm mt-0.5" style={{ color: PC[u] }}>{PLAYER_STYLES[u].label}</div>
-                  <div className="font-heading text-xl text-pool-chalk">~{Math.round(projected[u])}</div>
-                  <div className="font-body text-xs text-pool-chalk-dim">{model.current[u]} now</div>
-                </div>
-                <div className={`w-20 ${barH} rounded-t-lg`}
-                  style={{ background: `${PC[u]}18`, border: `1px solid ${PC[u]}45`, borderBottom: 'none' }} />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── SIMULATE panel ──────────────────────────────────────────────── */}
+      {/* ── SIMULATE panel ── */}
       <div className="px-4 mb-5">
         <div className="bg-pool-surface border border-pool-border rounded-xl p-4">
           <div className="flex items-center justify-between mb-5">
@@ -543,7 +413,121 @@ export default function PredictionsClient({ games, shots }: { games: RawGame[]; 
         </div>
       </div>
 
-      {/* Matchup odds (shows effective probabilities) */}
+      {/* Champion hero */}
+      <div className="px-4 mb-5">
+        <div className="bg-pool-surface border border-pool-border rounded-xl p-5 text-center">
+          <p className="font-body text-xs text-pool-chalk-dim uppercase tracking-widest mb-3">
+            {isSimulating ? 'Simulated Champion' : 'Predicted Champion'}
+          </p>
+          <div className="flex justify-center mb-3">
+            <div className="relative inline-block">
+              <PlayerAvatar username={champion} size={72} />
+              <span className="absolute -top-1 -right-2 text-2xl leading-none">🏆</span>
+            </div>
+          </div>
+          <p className="font-heading text-3xl" style={{ color: PC[champion] }}>
+            {PLAYER_STYLES[champion].label}
+          </p>
+          <p className="font-body text-pool-chalk-dim text-sm mt-1.5">
+            Projected{' '}
+            <span className="font-heading text-2xl text-pool-chalk">~{Math.round(projected[champion])}</span>
+            {' '}wins at game {totalTarget}
+          </p>
+          <p className="font-body text-xs text-pool-chalk-dim mt-1">
+            {model.current[champion]} wins now · +{Math.round(projected[champion] - model.current[champion])} expected from {effectiveRemaining} remaining
+          </p>
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="px-4 mb-5">
+        <div className="bg-pool-surface border border-pool-border rounded-xl p-4">
+          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-4">WINS RACE TO {totalTarget}</p>
+          <ResponsiveContainer width="100%" height={210}>
+            <LineChart data={chartData} margin={{ top: 5, right: 16, bottom: 0, left: -14 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1f3525" />
+              <XAxis
+                dataKey="games"
+                type="number"
+                domain={[0, totalTarget]}
+                ticks={xTicks}
+                stroke="#7a786f"
+                tick={{ fontSize: 10, fill: '#7a786f' }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v) => v === totalTarget ? `${v}🎯` : String(v)}
+              />
+              <YAxis
+                stroke="#7a786f"
+                tick={{ fontSize: 10, fill: '#7a786f' }}
+                tickLine={false}
+                axisLine={false}
+                width={28}
+              />
+              <ReTooltip
+                contentStyle={{ background: '#0e1e12', border: '1px solid #1f3525', borderRadius: 8, fontSize: 11, fontFamily: 'inherit' }}
+                labelFormatter={(v) => v === totalTarget ? `🎯 Game ${totalTarget} (${isSimulating ? 'simulated' : 'projected'})` : `Game ${v}`}
+                formatter={(value, name) => {
+                  const base = (name as string).replace('_p', '') as PlayerUsername
+                  const isProj = (name as string).endsWith('_p')
+                  return [`${Math.round(value as number)} wins${isProj ? (isSimulating ? ' (sim.)' : ' (proj.)') : ''}`, PLAYER_STYLES[base]?.label ?? String(name)]
+                }}
+              />
+              <ReferenceLine x={model.totalPlayed} stroke="#c9a22760" strokeDasharray="4 2"
+                label={{ value: 'now', position: 'insideTopRight', fontSize: 9, fill: '#c9a227', dy: 2 }}
+              />
+              {PLAYERS.map(u => (
+                <Line key={u} type="monotone" dataKey={u} stroke={PC[u]} strokeWidth={2.5}
+                  dot={false} connectNulls={false} isAnimationActive={false} />
+              ))}
+              {PLAYERS.map(u => (
+                <Line key={`${u}_p`} type="monotone" dataKey={`${u}_p`} stroke={PC[u]} strokeWidth={2}
+                  strokeDasharray="6 4" dot={false} connectNulls={false} isAnimationActive={false} opacity={0.65} />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+          <div className="flex gap-4 mt-2 justify-center flex-wrap">
+            {PLAYERS.map(u => (
+              <div key={u} className="flex items-center gap-1.5">
+                <div className="w-4 h-0.5 rounded" style={{ background: PC[u] }} />
+                <span className="font-body text-xs text-pool-chalk-dim">{PLAYER_STYLES[u].label}</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-1.5">
+              <svg width="16" height="4"><line x1="0" y1="2" x2="16" y2="2" stroke="#7a786f" strokeWidth="2" strokeDasharray="4 3" /></svg>
+              <span className="font-body text-xs text-pool-chalk-dim">{isSimulating ? 'simulated' : 'projected'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Projected podium */}
+      <div className="px-4 mb-5">
+        <div className="bg-pool-surface border border-pool-border rounded-xl p-4">
+          <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-4">
+            {isSimulating ? 'SIMULATED' : 'PROJECTED'} PODIUM AT GAME {totalTarget}
+          </p>
+          <div className="flex items-end justify-center gap-3">
+            {podiumSlots.map(({ u, rank, emoji, barH }) => (
+              <div key={u} className="flex flex-col items-center">
+                <div className="mb-2">
+                  <PlayerAvatar username={u} size={rank === 1 ? 60 : 44} />
+                </div>
+                <div className="text-center mb-2">
+                  <div className="text-xl leading-none">{emoji}</div>
+                  <div className="font-heading text-sm mt-0.5" style={{ color: PC[u] }}>{PLAYER_STYLES[u].label}</div>
+                  <div className="font-heading text-xl text-pool-chalk">~{Math.round(projected[u])}</div>
+                  <div className="font-body text-xs text-pool-chalk-dim">{model.current[u]} now</div>
+                </div>
+                <div className={`w-20 ${barH} rounded-t-lg`}
+                  style={{ background: `${PC[u]}18`, border: `1px solid ${PC[u]}45`, borderBottom: 'none' }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Matchup odds */}
       <div className="px-4 mb-5">
         <div className="bg-pool-surface border border-pool-border rounded-xl p-4">
           <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-4">MATCHUP ODDS</p>
@@ -594,9 +578,9 @@ export default function PredictionsClient({ games, shots }: { games: RawGame[]; 
           <p className="font-heading text-sm tracking-widest text-pool-chalk-dim mb-3">HOW IT&apos;S CALCULATED</p>
           <div className="flex flex-col gap-3">
             {[
-              { icon: '📊', label: 'All-time head-to-head record',             w: wAt },
+              { icon: '📊', label: 'All-time head-to-head record',                  w: wAt },
               { icon: '🔥', label: `Recent form (last ${model.RECENT_N} sessions)`, w: wRe },
-              { icon: '🎯', label: 'Shot accuracy advantage',                   w: wAc },
+              { icon: '🎯', label: 'Shot accuracy advantage',                        w: wAc },
             ].map(({ icon, label, w }) => {
               const total = wAt + wRe + wAc || 1
               const pct = Math.round((w / total) * 100)
