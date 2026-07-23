@@ -17,6 +17,7 @@ const BADGES_SEEN_KEY = 'thonara_badges_seen'
 const NAV_LINKS = [
   { href: '/achievements', label: 'Badges',     icon: '🏅' },
   { href: '/stats',        label: 'Stats',      icon: '📊' },
+  { href: '/predictions',  label: 'Predict',    icon: '🔮' },
   { href: '/history',      label: 'History',    icon: '📅' },
   { href: '/challenges',   label: 'Challenges', icon: '💰' },
   { href: '/tips',         label: 'Top Tips',   icon: '🎓' },
