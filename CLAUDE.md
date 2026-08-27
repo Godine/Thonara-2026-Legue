@@ -1,216 +1,217 @@
 # Thonara 2026 League — CLAUDE.md
 
 ## Project overview
-Pool league tracker for 3 friends: **Adib**, **Ahmed** (also called Shin), **Amine**.
-6-game round-robin per session. Next.js 14 App Router, Supabase (PostgreSQL + Realtime), Recharts, Tailwind CSS. Deployed on Vercel — auto-deploys on every push to any branch.
+Pool-league tracker for 3 friends: **Adib**, **Ahmed** (aka Shin), and **Amine**.
+Sessions are a 6-game round-robin; every shot can be recorded live and stats,
+odds, achievements and records are derived from that shot history. Built with
+Next.js 14 App Router + Supabase (PostgreSQL + Realtime), charted with Recharts,
+styled with Tailwind. Deployed on Vercel — **auto-deploys on every push to any
+branch**, so a broken push ships. Development happens on feature branches; open
+a PR only when asked.
 
-**Dev branch:** `claude/pool-league-tracker-design-MZa8A`
-Always develop on this branch, push when done.
+> ⚠️ **Naming.** Each friend has up to three names. In `players.username`:
+> `adib` = Adib, `ahmed` = "Shin" in some places, and **`godine` = Amine**. The
+> schema seed uses `shin@thonara.app` for Ahmed. When mapping ids ↔ people, go
+> through `username`, and remember `godine`/Amine are the same person.
 
 ---
 
 ## Tech stack
-- **Framework:** Next.js 14.2.35, App Router, TypeScript
-- **Database:** Supabase (no auth / RLS disabled), Realtime subscriptions via `postgres_changes`
-- **Charts:** Recharts (`LineChart`, `BarChart` layout=vertical, `Cell`, `ResponsiveContainer`)
-- **Fonts:** Bebas Neue (`font-heading`), DM Sans (`font-body`)
-- **CSS:** Tailwind with custom `pool-*` colour tokens (see `tailwind.config.ts`)
-- **PWA:** `app/manifest.ts`, `app/icon.tsx` (512px), `app/apple-icon.tsx` (180px)
+- **Framework:** Next.js 14.2.35, App Router, TypeScript, React 18
+- **Database:** Supabase (`@supabase/ssr` + `@supabase/supabase-js`), Realtime via `postgres_changes`
+- **Charts:** Recharts (line, bar, stacked/vertical, `Cell`, `ResponsiveContainer`)
+- **Dates:** `date-fns`
+- **Fonts:** Bebas Neue (`font-heading`), DM Sans (`font-body`) via `next/font/google`
+- **CSS:** Tailwind with custom `pool-*` colour tokens (`tailwind.config.ts`)
+- **PWA:** `app/manifest.ts`, `app/icon.png`, `app/apple-icon.png`, `public/sw.js` + `ServiceWorkerRegistration`
+- **Tests:** Vitest (`npm test`) — see [Testing](#testing)
 
 ---
 
-## Players & config — `lib/game-config.ts`
-```ts
-export type PlayerUsername = 'adib' | 'ahmed' | 'godine'
+## Auth — read this before touching login/RLS
+The app has **two half-wired identity systems**; know which is real:
 
-export const PLAYER_STYLES = {
-  adib:   { color: '#f5c518', dimColor: '#7a6209', number: 1, label: 'Adib',   photo: '/photos/adib.jpg'   },
-  ahmed:  { color: '#60a5fa', dimColor: '#1e3a5f', number: 2, label: 'Ahmed',  photo: '/photos/ahmed.jpg'  },
-  godine: { color: '#f87171', dimColor: '#7a2020', number: 3, label: 'Amine', photo: '/photos/amine.jpg' },
-}
+- **What actually gates the app: `localStorage`.** `components/PlayerGate.tsx`
+  shows a first-visit overlay to pick who you are and stores it under the key
+  `thonara_player`. Everything else reads it via `getStoredPlayer()`. There is
+  **no login wall** — `app/login/page.tsx` just `redirect('/')` and
+  `middleware.ts` is a pass-through.
+- **Supabase auth scaffolding exists but is largely vestigial:**
+  `app/auth/callback/route.ts`, `app/auth/reset-password/page.tsx`,
+  `lib/supabase/server.ts` cookie handling. `supabase/schema.sql` enables RLS
+  with `authenticated`-role policies on the game tables, yet the client uses the
+  anon key and never signs in — and `tip_completions` / `quiz_scores` explicitly
+  **`DISABLE ROW LEVEL SECURITY`**. In practice the deployed DB is permissive.
 
-export const GAME_SCHEDULE = [
-  { gameNumber: 1, player1: 'godine', player2: 'ahmed',  scorer: 'adib'   },
-  { gameNumber: 2, player1: 'adib',   player2: 'ahmed',  scorer: 'godine' },
-  { gameNumber: 3, player1: 'adib',   player2: 'godine', scorer: 'ahmed'  },
-  { gameNumber: 4, player1: 'ahmed',  player2: 'godine', scorer: 'adib'   },
-  { gameNumber: 5, player1: 'ahmed',  player2: 'adib',   scorer: 'godine' },
-  { gameNumber: 6, player1: 'godine', player2: 'adib',   scorer: 'ahmed'  },
-]
-```
-
-Player photos live in `public/photos/adib.jpg`, `ahmed.jpg`, `amine.jpg`.
+If you add features, follow the localStorage pattern for "who am I"; don't assume
+an authenticated Supabase session exists.
 
 ---
 
-## Key components
+## Data model — `supabase/schema.sql` & `types/database.ts`
+- **players** — `id, username, display_name, ball_number, color`
+- **sessions** — `id, date, is_complete, notes`. RLS allows edits only within 7 days.
+- **games** — `id, session_id, game_number (1–12), player1_id, player2_id,
+  winner_id, is_complete, loser_potted_black, breaker_id, loser_balls_remaining,
+  player1_color ('yellow'|'red')`
+- **shots** — `id, game_id, player_id, shot_number,
+  potted, balls_potted, opponent_balls_potted (foul credit), ball_color,
+  is_lucky, is_error, cue_ball_potted, created_at`. Deletes (undo) allowed < 7 days.
+- **tip_completions** / **quiz_scores** — Top-Tips progress + quiz results (RLS off)
+- **league_standings** (view) — wins/losses/games_played per player
 
-### `components/PlayerAvatar.tsx`
-Client component. Shows player photo in circular frame with coloured border + glow. Falls back silently to `PlayerBall` SVG on 404.
-
-### `components/PlayerBall.tsx`
-Full 3D SVG pool ball. 5 radial gradients (sphere, specular highlight, fill-light, ambient occlusion, number oval shadow). Ball `cy="22"`, contact shadow at `cy="46.5"`.
-
-### `components/PlayerGate.tsx`
-Full-screen overlay on first visit. Player picks who they are; saved to `localStorage` key `thonara_player`. Exports `getStoredPlayer()`, `setStoredPlayer()`, `clearStoredPlayer()`.
-
-### `components/Navbar.tsx`
-Fixed top navbar. Desktop: inline links. Mobile: hamburger → animated X with slide-down dropdown. Shows player chip (PlayerAvatar) with chevron. Closes on outside click and navigation. Uses `usePathname` for active route highlight.
+Shots carry richer data than the old boolean model: prefer
+`balls_potted ?? (potted ? 1 : 0)` when reading pot counts (there's a
+`ballsPotted()` helper in `lib/game-logic.ts`).
 
 ---
 
-## App pages
+## Players & schedule — `lib/game-config.ts`
+`PLAYER_STYLES` maps each username → `{ color, dimColor, number, label, photo }`
+(Adib gold, Ahmed blue, Amine/godine red). `GAME_SCHEDULE` is the fixed 6-game
+rotation (player1 / player2 / scorer). Photos live in `public/photos/`
+(`adib.jpg`, `ahmed.jpg`, `amine.jpg`, `godine.jpg`).
 
-### `app/page.tsx` (Dashboard)
-Server component. Fetches `league_standings` view + most recent session with games. Shows:
-- Hero header (THONARA / LEAGUE)
-- Standings sorted by wins (with rank badges 🥇🥈🥉)
-- START SESSION CTA button → `/session/new`
-- Last session game results
+---
 
-### `app/session/new/page.tsx`
-Creates a new session + 6 games per `GAME_SCHEDULE`, redirects to `/session/[id]`.
+## Win-odds engine — `lib/odds.ts`
+More than Bayesian smoothing — it's a **Markov chain** over remaining balls:
+- `weightedAccuracy(shots, playerId, decay=0.8)` — exponentially-decayed pot rate (recent shots weigh more; half-life ≈ 4 shots).
+- `solveMarkov(r1, r2, a1, a2, p1Turn)` — exact P(P1 wins) from ball counts, per-player accuracies, and whose turn it is, solved as a small DP.
+- `computeOdds(...)` — blends this game's weighted accuracy with each player's
+  **career prior** (Laplace-smoothed) to get per-player accuracies, runs the
+  Markov solve, then applies a **head-to-head nudge** (≤25%, tapering as the game
+  progresses). Returns integer `{ p1, p2 }` summing to 100; 50/50 when there's no data.
 
-### `app/session/[id]/page.tsx`
-Session overview. Lists all 6 games with status and links to each game page.
+Covered by `tests/odds.test.ts`.
 
-### `app/session/[id]/game/[gameId]/page.tsx` ← MAIN GAME PAGE
-Client component. Key state:
-```ts
-const [game, setGame]         = useState<GameFull | null>(null)
-const [shots, setShots]       = useState<Shot[]>([])
-const [histStats, setHistStats] = useState<Record<string, { shots: number; potted: number }>>({})
-const [flash, setFlash]       = useState<{ playerId: string; type: ShotType } | null>(null)
+---
+
+## Game logic — `lib/game-logic.ts` (pure, unit-tested)
+Extracted from the game page so the tricky rules are isolated and testable:
+- `ballsPotted(shot)` — tolerant pot count (see above)
+- `isPlayer1Turn(shots, p1Id, p2Id)` — turn tracking: a pot keeps the table, a
+  miss switches, a **foul switches AND grants one free turn** (the incoming
+  player's first miss doesn't switch back)
+- `computeBreakInfo(shots)` — summarises the opening break run (`pots`,
+  `yellows`, `reds`, `black`, `breakerId`)
+- `currentStreak(shots, playerId)` — trailing consecutive-pot run
+- `loserBallsRemaining(shots, loserId)` — 7 minus legally-potted balls, clamped
+
+Covered by `tests/game-logic.test.ts`.
+
+---
+
+## App pages (`app/`)
+- **`page.tsx`** (Dashboard, server) — hero, standings with rank badges, START
+  SESSION CTA, last-session results, ELO rating chart, season countdown.
+- **`session/new`** — creates a session + 6 games from `GAME_SCHEDULE`, redirects.
+- **`session/[id]`** — session overview; per-game status, stakes, cue race.
+- **`session/[id]/game/[gameId]`** — ⭐ main live game page (see below).
+- **`stats`** (`StatsClient`) — standings & form, points race, accuracy over
+  time, shot accuracy, efficiency, head-to-head, wins by game number, fun facts.
+- **`achievements`**, **`records`**, **`player/[username]`**, **`predictions`**,
+  **`challenges`**, **`history`**, **`practice`**, **`coin`** (coin-flip breaker
+  picker), **`rules`**.
+- **`tips`** — "Top Tips" learning hub: bilingual articles, custom SVG
+  illustrations, per-category quizzes (`tips/quiz/[category]`, `tips/quiz/final`)
+  and a leaderboard.
+
+### The main game page — `app/session/[id]/game/[gameId]/page.tsx`
+Client component. **State/effects live in hooks** (`hooks/`); the page composes
+them and holds only view-local UI state (popups, break form, admin panel).
+
+- Data & realtime: `useGameData(db, gameId)` → `{ game, shots, loading,
+  histStats, h2hStats, showCelebration, loadGame, setGame, setShots }`.
+  Subscribes to `shots` + `games` changes; also fetches historical + H2H data
+  for odds and raises the one-shot win-celebration flag.
+- `useGameTimer(shots, isComplete)` → live elapsed timer from the first shot.
+- `usePendingShots(db)` → `{ pendingCount, enqueue, enqueueMany, dropLast }`,
+  an offline queue that flushes on the `online` event.
+- `useLongPress<string>({ onLongPress, onClick })` → POT/ERR buttons: tap
+  records a shot, hold opens the multi-ball / foul popup for the active player.
+
+**Shot recording** is optimistic (`setShots` immediately, then insert; failed
+inserts go to the pending queue). Turn/break/streak/odds are derived each render
+from `lib/game-logic.ts` + `lib/odds.ts`. Views: break entry (first shot) →
+shot entry → recap (complete) → watching (no stored player). Modals: multi-pot,
+foul/in-off, end-game, odds-info, and an **Amine-only admin panel** (edit
+winner, delete shots, re-open, reset).
+
+---
+
+## Hooks — `hooks/`
+`useGameData`, `useGameTimer`, `usePendingShots`, `useLongPress`. These were
+extracted from the game page; keep new game-page logic here rather than growing
+the component.
+
+---
+
+## Key components (`components/`)
+- **PlayerAvatar** — photo in coloured circular frame; falls back to PlayerBall on 404.
+- **PlayerBall** — full 3D SVG pool ball (radial gradients + contact shadow).
+- **PlayerGate** — first-visit identity picker (`localStorage`; see Auth).
+- **Navbar** — fixed nav, mobile hamburger, active-route highlight, player chip.
+- **WinCelebration** — fullscreen winner overlay + CSS confetti.
+- **PoolTableAnimation** — top-down table with stick-figure players reacting to
+  shots (built; pure CSS, no animation library).
+- **EloRatingChart**, **SeasonCountdown**, **FlipBadgeCard**, **OfflineBanner**,
+  **PullToRefresh**, **ThemeToggle**, **ServiceWorkerRegistration**.
+- **components/tips/** — article content, quiz runner/leaderboard, language
+  context, progress context, and the `illustrations/` SVG scenes.
+
+---
+
+## Domain libraries (`lib/`)
+- **stats.ts** — `getPlayerStats`, `pct`, `longestStreak`, `formatTime`, play-order sorting.
+- **odds.ts**, **game-logic.ts** — see above.
+- **achievements.ts** — `ACHIEVEMENTS` catalogue (rarity tiers) + `computePlayerAchievements(username, games, shots)`.
+- **records.ts** — `computeRecords(games, shots)` → career / single-game record sections.
+- **challenges.ts** — session stakes (dirhams) + cue-race standings.
+- **season.ts** — `SEASON_GAME_LIMIT = 100`; season progress for the 100-game challenge.
+- **session-prediction.ts** — deterministic pre-session "who's winning tonight" pick + flavour reason.
+- **narrative.ts**, **trash-talk.ts** — generated standings narrative & post-game verdict lines.
+- **quiz-content.ts**, **tips-content.ts** — Top-Tips articles + quiz banks.
+- **queries/** — typed Supabase helpers (`games`, `sessions`, `shots`, `standings`, `tips-progress`) re-exported from `queries/index.ts`.
+- **supabase/** — `client.ts` (browser) and `server.ts` (RSC cookies); both have `?? 'placeholder'` fallbacks so static prerender survives without env vars.
+
+---
+
+## Testing
+Vitest, config in `vitest.config.ts` (node env, `@/` alias, `tests/**/*.test.ts`).
 ```
-
-**Shot recording:**
-- `recordShot(playerId, type)` — optimistic update: adds shot to `shots` state immediately, then inserts to DB
-- `undoLastShot()` — optimistic update: filters last shot from state immediately, then deletes from DB
-- Realtime subscription on `shots` table and `games` table (both fire `fetchGame` to reconcile)
-
-**Win odds (`computeOdds`):**
-Blends all-time historical shot data (fetched once when game loads into `histStats`) with current game shots as a Bayesian prior + Laplace smoothing:
-```ts
-const p1Acc = (p1.potted + p1Prior.potted + 1) / (p1.shots + p1Prior.shots + 2)
+npm test        # run once
+npm run test:watch
 ```
-Odds are shown as soon as `histStats` has data (from game start, not waiting for first shot).
+`tests/helpers.ts` builds `Shot` fixtures. Suites cover `game-logic`, `odds`,
+`stats`, `achievements`, and `records`. **When you change the odds model, turn
+rules, streak/break logic, or records, update or add a test.** The pure modules
+are the right place to add coverage — keep new logic pure and testable.
 
-**Shot types:** `'potted' | 'lucky' | 'miss' | 'error'`
-
-**Layout:**
-1. Header (back link, game title, scorer info)
-2. Two stat cards (grid-cols-2): potted, shots, accuracy bar, win odds
-3. **← PoolTableAnimation goes here (PENDING — see below)**
-4. Shot entry buttons (4 types × 2 players, grid-cols-2)
-5. Undo + End Game buttons
-6. Shot log (last 5 shots)
-7. End Game modal (winner picker + loser potted black checkbox)
-
-### `app/stats/page.tsx`
-Client component. Fetches all complete games + all shots. Sections:
-1. Standings (with W/L form dots — last 5 games per player)
-2. Points Race — cumulative wins line chart over sessions
-3. Accuracy Over Time — pot% per session per player (line chart)
-4. Shot Accuracy — all-time pot% bar chart + detailed breakdown table
-5. Shot Efficiency — average pots per game (horizontal bar chart)
-6. Head to Head — split bars for each pair
-7. Wins by Game Number — stacked bar chart
-8. Fun Facts
-
-### `app/history/page.tsx`
-Lists all past sessions.
-
-### `app/rules/page.tsx`
-Static rules page.
+Also run before pushing (Vercel deploys every branch):
+```
+npx tsc --noEmit
+npx next build
+```
 
 ---
 
 ## Tailwind colour tokens
 ```
-pool-bg:          #060d08   (page background)
-pool-surface:     #0e1e12   (cards)
-pool-felt:        #1a4731   (pool table green)
-pool-felt-light:  #246340
-pool-border:      #1f3525
-pool-gold:        #c9a227
-pool-gold-light:  #e8c547
-pool-chalk:       #f0ede6   (primary text)
-pool-chalk-dim:   #7a786f   (secondary text)
-pool-red:         #ef4444
-pool-green-bright:#22c55e
+pool-bg #060d08 · pool-surface #0e1e12 · pool-felt #1a4731 · pool-felt-light #246340
+pool-border #1f3525 · pool-gold #c9a227 · pool-gold-light #e8c547
+pool-chalk #f0ede6 · pool-chalk-dim #7a786f
+pool-red #ef4444 · pool-green-bright #22c55e
 ```
-
-CSS utilities in `globals.css`: `.gold-shimmer`, `.felt-bg`, `.pool-rail`, `.shot-btn`, `.glow-gold/green/red`, `.card-hover`, `.nav-glass`
-
----
-
-## Supabase client pattern
-- Server components: `import { createClient } from '@/lib/supabase/server'`
-- Client components: `import { createClient } from '@/lib/supabase/client'`
-- Both have `?? 'placeholder'` fallbacks to survive static prerender without env vars
+CSS utilities in `globals.css`: `.gold-shimmer`, `.felt-bg`, `.pool-rail`,
+`.shot-btn`, `.glow-gold/green/red`, `.card-hover`, `.nav-glass`, plus the
+`animate-slide-up/down`, `animate-fade-in` keyframes the game page relies on.
 
 ---
 
-## Types — `types/database.ts`
-```ts
-interface Shot {
-  id: string; game_id: string; player_id: string
-  potted: boolean; is_lucky: boolean; is_error: boolean
-  shot_number: number; created_at: string
-}
-interface Game {
-  id: string; session_id: string; game_number: number
-  player1_id: string; player2_id: string
-  winner_id: string | null; is_complete: boolean
-  loser_potted_black: boolean; created_at: string
-}
-interface LeagueStanding {
-  id: string; username: string; display_name: string
-  ball_number: number; color: string
-  wins: number; losses: number; games_played: number
-}
-```
-
----
-
-## PENDING FEATURE: PoolTableAnimation
-
-**Status:** Fully designed, not yet built.
-
-**Placement:** In `app/session/[id]/game/[gameId]/page.tsx`, between the stat cards and the shot entry buttons. Always visible during an active game.
-
-**Spec:**
-- Small fixed-height rectangle (no taller than ~160px on mobile)
-- Top-down SVG pool table (green felt, 6 pockets: 4 corners + 2 midpoints of long sides)
-- Two stick figures with profile photo circular heads (small, ~24px, load from `/photos/[username].jpg`, fall back to `PlayerBall`)
-- Player 1 on the LEFT side, Player 2 on the RIGHT side
-- One ball stays at **centre table** at all times
-- Between shots: both figures idle/wander on their side of the table
-- On each shot event (detected by watching `shots.length` change):
-  - The shooting player's figure animates toward the ball (walks to centre)
-  - Figure pauses and "strikes" (cue motion)
-  - Emoji reaction floats above the figure's head and fades out (~1.5s):
-    - Pot:   😎 or 🤩
-    - Lucky: 🍀 or 😏
-    - Miss:  😤 or 😠
-    - Error: 🤦 or 😡
-  - On a pot: ball animates (rolls) to a random pocket, then reappears at centre
-  - On miss/error: ball stays at centre
-  - Figure walks back to their side
-
-**Part 2 — Win celebration (fullscreen overlay):**
-- Triggered when `game.is_complete` becomes true (or on `confirmEndGame`)
-- Fixed z-50 overlay over entire screen
-- Winner's profile photo large + glow in their colour
-- 🏆 trophy emoji large
-- Loser figure with 😭 emoji
-- Pure CSS confetti burst (no library)
-- Auto-dismiss after ~4s or tap to close
-
-**Implementation notes:**
-- Use CSS `transform: translate()` for all movement (GPU-accelerated)
-- All animations < 0.8s except idle wander (continuous subtle loop)
-- New component file: `components/PoolTableAnimation.tsx`
-- Props: `{ p1: Player, p2: Player, lastShot: Shot | null, isComplete: boolean, winnerId: string | null }`
-- Detect new shot by comparing `lastShot.id` in a `useEffect`
-- Do NOT use any animation library — pure CSS keyframes + React state
+## Conventions
+- Server components: `import { createClient } from '@/lib/supabase/server'`.
+  Client components: `from '@/lib/supabase/client'`.
+- Prefer the typed helpers in `lib/queries` over ad-hoc `db.from(...)` calls.
+- Keep derived game math in `lib/game-logic.ts` (pure) and stateful concerns in
+  `hooks/` — the game page should stay a composition layer.
