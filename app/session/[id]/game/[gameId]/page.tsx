@@ -22,29 +22,17 @@ import { usePendingShots } from '@/hooks/usePendingShots'
 import { useLongPress } from '@/hooks/useLongPress'
 import PlayerBall from '@/components/PlayerBall'
 import WinCelebration from '@/components/WinCelebration'
+import ShotLog from '@/components/game/ShotLog'
+import FoulPopup from '@/components/game/FoulPopup'
+import MultiPotPopup from '@/components/game/MultiPotPopup'
+import EndGameModal from '@/components/game/EndGameModal'
+import OddsInfoModal from '@/components/game/OddsInfoModal'
+import AdminPanel from '@/components/game/AdminPanel'
+import MilestoneToasts from '@/components/game/MilestoneToasts'
+import type { EndGameState, PotPopupState, FoulState, MilestoneToast } from '@/components/game/types'
 import type { Shot } from '@/types/database'
 
 type ShotType = 'potted' | 'lucky' | 'miss' | 'error'
-
-interface EndGameState {
-  open: boolean
-  winnerId: string
-  blackBall: boolean
-}
-
-interface PotPopupState {
-  playerId: string
-  ownBalls: number
-  oppBalls: number
-}
-
-interface MilestoneToast {
-  id: string
-  playerColor: string
-  emoji: string
-  headline: string
-  message: string
-}
 
 export default function GamePage() {
   const { id: sessionId, gameId } = useParams<{ id: string; gameId: string }>()
@@ -67,7 +55,7 @@ export default function GamePage() {
   const [potPopup, setPotPopup]         = useState<PotPopupState | null>(null)
   const [colorAssignment, setColorAssignment] = useState<Record<string, 'yellow' | 'red'> | null>(null)
   const [manualActivePlayer, setManualActivePlayer] = useState<string | null>(null)
-  const [inoffPopup, setInoffPopup]     = useState<{ playerId: string; ownBalls: number; oppBalls: number; cueBallIn: boolean } | null>(null)
+  const [inoffPopup, setInoffPopup]     = useState<FoulState | null>(null)
   const [milestoneToasts, setMilestoneToasts] = useState<MilestoneToast[]>([])
 
   // Game data + realtime, elapsed timer, and the offline shot queue all live
@@ -962,331 +950,30 @@ export default function GamePage() {
       )}
 
       {/* Last 5 shots */}
-      {shots.length > 0 && (
-        <div className="mx-4 mb-4 rounded-2xl overflow-hidden border border-pool-border bg-pool-surface">
-          <div className="flex items-center justify-between px-4 py-2 border-b border-pool-border/60">
-            <span className="font-heading text-xs tracking-widest text-pool-chalk-dim">LAST SHOTS</span>
-            <span className="font-body text-xs text-pool-chalk-dim/50">{shots.length} total</span>
-          </div>
-          <div className="divide-y divide-pool-border/40">
-            {shots.slice(-5).reverse().map((shot, i) => {
-              const shooter = shot.player_id === p1.id ? p1 : p2
-              const shooterStyle = shot.player_id === p1.id ? p1Style : p2Style
-              const shotBalls = shot.balls_potted ?? (shot.potted ? 1 : 0)
-              const oppBalls = shot.opponent_balls_potted ?? 0
-              const cueBallIn = shot.cue_ball_potted ?? false
-              const label = shot.is_error
-                ? cueBallIn
-                  ? oppBalls > 0
-                    ? `⚪ Scratch +${oppBalls} opp`
-                    : shotBalls > 0 ? `⚪ Scratch +${shotBalls}` : '⚪ Scratch'
-                  : oppBalls > 0 ? `⚠ Opp ×${oppBalls}`
-                  : shotBalls > 0 ? `⚠ In-off ×${shotBalls}`
-                  : '⚠ Error'
-                : shot.is_lucky ? '★ Lucky'
-                : shotBalls > 1 ? `● ×${shotBalls}`
-                : shotBalls === 1 ? '● Potted'
-                : '✕ Miss'
-              const color = shot.is_error
-                ? cueBallIn ? '#a78bfa' : oppBalls > 0 ? '#f97316' : '#ef4444'
-                : shot.is_lucky ? '#c9a227' : shotBalls > 0 ? '#22c55e' : '#7a786f'
-              return (
-                <div key={shot.id} className={`flex items-center gap-3 px-4 py-2.5 ${i === 0 ? 'bg-pool-border/20' : ''}`}>
-                  <span className="font-body text-xs text-pool-chalk-dim/50 w-5 shrink-0 tabular-nums">#{shot.shot_number}</span>
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: shooterStyle?.color }} />
-                  <span className="font-body text-xs text-pool-chalk flex-1">{shooter.display_name}</span>
-                  <span className="font-body text-xs font-medium" style={{ color }}>{label}</span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+      <ShotLog shots={shots} p1={p1} p2={p2} />
 
       {/* Foul popup */}
       {inoffPopup && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in"
-          onClick={() => setInoffPopup(null)}
-        >
-          <div
-            className="w-full max-w-lg bg-pool-surface rounded-t-3xl border-t border-pool-border p-6 animate-slide-up"
-            onClick={e => e.stopPropagation()}
-          >
-            <h2 className="font-heading text-2xl tracking-wider text-pool-chalk text-center mb-1">FOUL</h2>
-            <p className="font-body text-xs text-pool-chalk-dim text-center mb-5">
-              Turn switches. Mark what happened.
-            </p>
-
-            {/* Cue ball toggle */}
-            <button
-              onClick={() => setInoffPopup(p => p ? { ...p, cueBallIn: !p.cueBallIn } : p)}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 mb-4 transition-all active:scale-[0.98] ${
-                inoffPopup.cueBallIn
-                  ? 'border-violet-400 bg-violet-400/15 text-violet-300'
-                  : 'border-pool-border text-pool-chalk-dim hover:border-violet-400/40'
-              }`}
-            >
-              <span className="text-xl leading-none">⚪</span>
-              <span className="font-heading text-base tracking-wider flex-1 text-left">CUE BALL POTTED</span>
-              <span className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${
-                inoffPopup.cueBallIn ? 'bg-violet-400 border-violet-400' : 'border-pool-chalk-dim'
-              }`}>
-                {inoffPopup.cueBallIn && <span className="text-pool-bg text-xs font-bold">✓</span>}
-              </span>
-            </button>
-
-            {/* Opponent balls */}
-            <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-2">Opponent balls potted</p>
-            <div className="flex gap-3 mb-4">
-              {[0, 1, 2, 3].map(n => (
-                <button
-                  key={n}
-                  onClick={() => setInoffPopup(p => p ? { ...p, oppBalls: n } : p)}
-                  className={`flex-1 py-3.5 rounded-xl border-2 font-heading text-2xl transition-all active:scale-95 ${
-                    inoffPopup.oppBalls === n
-                      ? 'border-orange-500 bg-orange-500/20 text-orange-400'
-                      : 'border-pool-border text-pool-chalk-dim hover:border-orange-500/40'
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-
-            {/* Own balls potted */}
-            <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-2">Your balls potted</p>
-            <div className="flex gap-3 mb-4">
-              {[0, 1, 2, 3].map(n => (
-                <button
-                  key={n}
-                  onClick={() => setInoffPopup(p => p ? { ...p, ownBalls: n } : p)}
-                  className={`flex-1 py-3.5 rounded-xl border-2 font-heading text-2xl transition-all active:scale-95 ${
-                    inoffPopup.ownBalls === n
-                      ? 'border-violet-400 bg-violet-400/20 text-violet-300'
-                      : 'border-pool-border text-pool-chalk-dim hover:border-violet-400/40'
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex gap-3 mt-2">
-              <button
-                onClick={() => setInoffPopup(null)}
-                className="flex-1 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-wider text-pool-chalk-dim hover:text-pool-chalk transition-all"
-              >
-                CANCEL
-              </button>
-              <button
-                onClick={() => recordFoul(inoffPopup.playerId, inoffPopup.ownBalls, inoffPopup.oppBalls, inoffPopup.cueBallIn)}
-                className="flex-1 py-4 rounded-xl bg-pool-red text-pool-chalk font-heading text-lg tracking-widest hover:brightness-110 transition-all active:scale-[0.98]"
-              >
-                CONFIRM
-              </button>
-            </div>
-          </div>
-        </div>
+        <FoulPopup value={inoffPopup} setValue={setInoffPopup} onConfirm={recordFoul} />
       )}
 
       {/* Multi-ball pot popup */}
       {potPopup && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in"
-          onClick={() => setPotPopup(null)}
-        >
-          <div
-            className="w-full max-w-lg bg-pool-surface rounded-t-3xl border-t border-pool-border p-6 animate-slide-up"
-            onClick={e => e.stopPropagation()}
-          >
-            <h2 className="font-heading text-2xl tracking-wider text-pool-chalk text-center mb-6">HOW MANY BALLS?</h2>
-
-            <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-2">Your balls</p>
-            <div className="flex gap-3 mb-5">
-              {[1, 2, 3].map(n => (
-                <button
-                  key={n}
-                  onClick={() => setPotPopup(p => p ? { ...p, ownBalls: n } : p)}
-                  className={`flex-1 py-4 rounded-xl border-2 font-heading text-2xl transition-all active:scale-95 ${
-                    potPopup.ownBalls === n
-                      ? 'border-green-500 bg-green-500/20 text-green-400'
-                      : 'border-pool-border text-pool-chalk-dim hover:border-green-500/40'
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-
-            <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-2">Opponent's balls (foul pot)</p>
-            <div className="flex gap-3 mb-5">
-              {[0, 1, 2].map(n => (
-                <button
-                  key={n}
-                  onClick={() => setPotPopup(p => p ? { ...p, oppBalls: n } : p)}
-                  className={`flex-1 py-4 rounded-xl border-2 font-heading text-2xl transition-all active:scale-95 ${
-                    potPopup.oppBalls === n
-                      ? 'border-red-500 bg-red-500/20 text-red-400'
-                      : 'border-pool-border text-pool-chalk-dim hover:border-red-500/40'
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-
-            {potPopup.oppBalls > 0 && (
-              <p className="text-xs font-body text-pool-red text-center mb-4">⚠ Foul — marked as an error, ball credited to opponent</p>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setPotPopup(null)}
-                className="flex-1 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-wider text-pool-chalk-dim hover:text-pool-chalk transition-all"
-              >
-                CANCEL
-              </button>
-              <button
-                onClick={() => recordMultiPot(potPopup.playerId, potPopup.ownBalls, potPopup.oppBalls)}
-                className="flex-1 py-4 rounded-xl bg-pool-green-bright text-pool-bg font-heading text-lg tracking-widest hover:brightness-110 transition-all active:scale-[0.98]"
-              >
-                CONFIRM
-              </button>
-            </div>
-          </div>
-        </div>
+        <MultiPotPopup value={potPopup} setValue={setPotPopup} onConfirm={recordMultiPot} />
       )}
 
       {/* End game modal */}
       {endGame.open && (
-        <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in">
-          <div className="w-full max-w-lg bg-pool-surface rounded-t-3xl border-t border-pool-border p-6 animate-slide-up">
-            <h2 className="font-heading text-3xl tracking-wider text-pool-chalk text-center mb-6">END GAME</h2>
-            <p className="font-body text-xs tracking-widest uppercase text-pool-chalk-dim mb-3">Who won?</p>
-            <div className="grid grid-cols-2 gap-3 mb-5">
-              {[p1, p2].map(player => {
-                const style = PLAYER_STYLES[player.username as PlayerUsername]
-                const selected = endGame.winnerId === player.id
-                return (
-                  <button key={player.id} onClick={() => setEndGame(e => ({ ...e, winnerId: player.id }))}
-                    className={`py-4 rounded-2xl border-2 font-heading text-xl tracking-wider flex flex-col items-center gap-2 transition-all active:scale-95 ${selected ? 'border-pool-gold bg-pool-gold/15 text-pool-gold' : 'border-pool-border bg-pool-bg text-pool-chalk-dim hover:border-pool-chalk/30'}`}>
-                    {style && <PlayerBall number={style.number} color={style.color} size={40} />}
-                    {player.display_name.toUpperCase()}
-                    {selected && <span className="text-sm">🏆</span>}
-                  </button>
-                )
-              })}
-            </div>
-            <button onClick={() => setEndGame(e => ({ ...e, blackBall: !e.blackBall }))}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border mb-5 transition-all ${endGame.blackBall ? 'border-pool-red/50 bg-pool-red/10 text-pool-chalk' : 'border-pool-border bg-pool-bg text-pool-chalk-dim'}`}>
-              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${endGame.blackBall ? 'bg-pool-red border-pool-red' : 'border-pool-chalk-dim'}`}>
-                {endGame.blackBall && <span className="text-xs text-white">✓</span>}
-              </div>
-              <span className="font-body text-sm">Loser potted the black ball</span>
-            </button>
-            <div className="flex gap-3">
-              <button onClick={() => setEndGame(e => ({ ...e, open: false }))}
-                className="flex-1 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-wider text-pool-chalk-dim hover:text-pool-chalk transition-all">
-                CANCEL
-              </button>
-              <button onClick={confirmEndGame} disabled={!endGame.winnerId || saving}
-                className="flex-1 py-4 rounded-xl bg-pool-gold text-pool-bg font-heading text-lg tracking-widest hover:bg-pool-gold-light disabled:opacity-40 transition-all active:scale-95 glow-gold">
-                {saving ? 'SAVING…' : 'CONFIRM'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <EndGameModal value={endGame} setValue={setEndGame} p1={p1} p2={p2} saving={saving} onConfirm={confirmEndGame} />
       )}
 
       {/* Odds info modal */}
       {showOddsInfo && (
-        <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in"
-          onClick={() => setShowOddsInfo(false)}>
-          <div className="w-full max-w-lg bg-pool-surface rounded-t-3xl border-t border-pool-border p-6 animate-slide-up"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="font-heading text-2xl tracking-wider text-pool-chalk">HOW ODDS WORK</h2>
-              <button onClick={() => setShowOddsInfo(false)}
-                className="text-pool-chalk-dim hover:text-pool-chalk transition-colors text-2xl leading-none px-1">×</button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="bg-pool-bg rounded-xl p-4 border border-pool-border">
-                <p className="font-heading text-sm tracking-widest text-pool-gold mb-1">TURN SIMULATION</p>
-                <p className="font-body text-sm text-pool-chalk-dim leading-relaxed">
-                  The model simulates the game turn by turn — pot a ball and you keep shooting,
-                  miss and the table flips. From the current position (balls left, whose shot it is)
-                  it calculates the <span className="text-pool-chalk">exact mathematical probability</span> of winning.
-                </p>
-              </div>
-
-              <div className="bg-pool-bg rounded-xl p-4 border border-pool-border">
-                <p className="font-heading text-sm tracking-widest text-pool-gold mb-1">ACCURACY SCORE</p>
-                <p className="font-body text-sm text-pool-chalk-dim leading-relaxed">
-                  Your pot rate blends two signals:
-                </p>
-                <ul className="mt-2 space-y-1">
-                  <li className="font-body text-sm text-pool-chalk-dim flex gap-2">
-                    <span className="text-pool-gold shrink-0">→</span>
-                    <span><span className="text-pool-chalk">This game</span> — recent shots count more than early ones (momentum)</span>
-                  </li>
-                  <li className="font-body text-sm text-pool-chalk-dim flex gap-2">
-                    <span className="text-pool-gold shrink-0">→</span>
-                    <span><span className="text-pool-chalk">Career history</span> — your all-time pot rate, so odds make sense from shot one</span>
-                  </li>
-                </ul>
-              </div>
-
-              <div className="bg-pool-bg rounded-xl p-4 border border-pool-border">
-                <p className="font-heading text-sm tracking-widest text-pool-gold mb-1">HEAD-TO-HEAD NUDGE</p>
-                <p className="font-body text-sm text-pool-chalk-dim leading-relaxed">
-                  Your historical win rate against <span className="text-pool-chalk">this specific opponent</span> adds
-                  a small adjustment (up to 25%, tapering off as more shots are taken in this game).
-                </p>
-                {(h2hStats.p1Wins + h2hStats.p2Wins) > 0 && (
-                  <p className="font-body text-xs text-pool-chalk-dim mt-2 pt-2 border-t border-pool-border/50">
-                    This matchup: <span style={{ color: p1Style?.color }}>{p1.display_name}</span> {h2hStats.p1Wins}
-                    {' – '}
-                    {h2hStats.p2Wins} <span style={{ color: p2Style?.color }}>{p2.display_name}</span>
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <button onClick={() => setShowOddsInfo(false)}
-              className="w-full mt-5 py-4 rounded-xl border border-pool-border font-heading text-lg tracking-widest text-pool-chalk-dim hover:text-pool-chalk transition-all">
-              GOT IT
-            </button>
-          </div>
-        </div>
+        <OddsInfoModal p1={p1} p2={p2} h2hStats={h2hStats} onClose={() => setShowOddsInfo(false)} />
       )}
 
       {/* Milestone toasts */}
-      {milestoneToasts.length > 0 && (
-        <div className="fixed inset-x-0 bottom-4 z-[60] flex flex-col items-center gap-2 pointer-events-none px-4">
-          {milestoneToasts.map(toast => (
-            <div key={toast.id} className="animate-slide-up max-w-sm w-full">
-              <div
-                className="flex items-center gap-3 px-4 py-3.5 rounded-2xl border"
-                style={{
-                  borderColor: `${toast.playerColor}50`,
-                  background: `linear-gradient(135deg, ${toast.playerColor}22 0%, rgb(var(--pool-bg)) 100%)`,
-                  boxShadow: `0 0 40px ${toast.playerColor}40, 0 8px 32px rgba(0,0,0,0.6)`,
-                }}
-              >
-                <span className="text-3xl leading-none">{toast.emoji}</span>
-                <div>
-                  <p className="font-heading text-[11px] tracking-[0.2em] leading-none mb-1" style={{ color: toast.playerColor }}>
-                    {toast.headline}
-                  </p>
-                  <p className="font-body text-base text-pool-chalk leading-none">{toast.message}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <MilestoneToasts toasts={milestoneToasts} />
 
       {/* Win celebration overlay */}
       {showCelebration && game.winner && (
@@ -1299,100 +986,22 @@ export default function GamePage() {
 
       {/* Admin panel (Amine only) */}
       {adminPanel && (
-        <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 animate-fade-in"
-          onClick={() => setAdminPanel(false)}>
-          <div className="w-full max-w-lg bg-pool-surface rounded-t-3xl border-t border-pool-border animate-slide-up max-h-[85vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}>
-            <div className="sticky top-0 bg-pool-surface px-6 pt-6 pb-3 border-b border-pool-border">
-              <div className="flex items-center justify-between">
-                <h2 className="font-heading text-2xl tracking-wider text-pool-chalk">EDIT GAME</h2>
-                <button onClick={() => setAdminPanel(false)}
-                  className="text-pool-chalk-dim hover:text-pool-chalk text-2xl leading-none px-1">×</button>
-              </div>
-            </div>
-
-            <div className="px-6 py-4 space-y-6">
-              <div>
-                <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3">CHANGE WINNER</p>
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  {[p1, p2].map(player => {
-                    const style = PLAYER_STYLES[player.username as PlayerUsername]
-                    const sel = adminWinnerId === player.id
-                    return (
-                      <button key={player.id}
-                        onClick={() => setAdminWinnerId(player.id)}
-                        className={`py-3 rounded-xl border-2 font-heading text-base tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 ${sel ? 'border-pool-gold bg-pool-gold/15 text-pool-gold' : 'border-pool-border text-pool-chalk-dim hover:border-pool-chalk/30'}`}>
-                        {style && <PlayerBall number={style.number} color={style.color} size={28} />}
-                        {player.display_name.toUpperCase()}
-                        {sel && ' 🏆'}
-                      </button>
-                    )
-                  })}
-                </div>
-                <button onClick={() => setAdminBlackBall(b => !b)}
-                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border mb-3 text-sm font-body transition-all ${adminBlackBall ? 'border-pool-red/50 bg-pool-red/10 text-pool-chalk' : 'border-pool-border text-pool-chalk-dim'}`}>
-                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${adminBlackBall ? 'bg-pool-red border-pool-red' : 'border-pool-chalk-dim'}`}>
-                    {adminBlackBall && <span className="text-[10px] text-white">✓</span>}
-                  </div>
-                  Loser potted the black ball
-                </button>
-                <button onClick={adminChangeWinner} disabled={!adminWinnerId || saving}
-                  className="w-full py-3 rounded-xl bg-pool-gold text-pool-bg font-heading text-base tracking-widest hover:bg-pool-gold-light disabled:opacity-40 transition-all active:scale-95">
-                  {saving ? 'SAVING…' : 'SAVE WINNER'}
-                </button>
-              </div>
-
-              {shots.length > 0 && (
-                <div>
-                  <p className="font-heading text-xs tracking-widest text-pool-chalk-dim mb-3">
-                    SHOTS ({shots.length})
-                  </p>
-                  <div className="bg-pool-bg rounded-xl border border-pool-border divide-y divide-pool-border overflow-hidden">
-                    {[...shots].sort((a, b) => a.shot_number - b.shot_number).map(s => {
-                      const shooter = s.player_id === p1.id ? p1 : p2
-                      const shooterStyle = PLAYER_STYLES[shooter.username as PlayerUsername]
-                      const shotBalls = s.balls_potted ?? (s.potted ? 1 : 0)
-                      const oppBalls = s.opponent_balls_potted ?? 0
-                      const label = s.is_error
-                        ? oppBalls > 0 ? `Foul (+${oppBalls} opp)` : 'Error'
-                        : s.is_lucky ? 'Lucky'
-                        : shotBalls > 1 ? `×${shotBalls} Pots`
-                        : shotBalls === 1 ? 'Potted'
-                        : 'Miss'
-                      const labelColor = s.is_error ? '#ef4444' : s.is_lucky ? '#c9a227' : shotBalls > 0 ? '#22c55e' : '#7a786f'
-                      return (
-                        <div key={s.id} className="flex items-center gap-3 px-3 py-2">
-                          <span className="font-body text-xs text-pool-chalk-dim w-6 text-right shrink-0">#{s.shot_number}</span>
-                          <span className="font-body text-sm shrink-0" style={{ color: shooterStyle?.color }}>{shooter.display_name}</span>
-                          <span className="font-body text-xs flex-1" style={{ color: labelColor }}>{label}</span>
-                          <button onClick={() => adminDeleteShot(s.id)}
-                            className="text-pool-red hover:text-red-400 text-lg leading-none px-1 transition-colors">
-                            ×
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div className="border border-pool-red/30 rounded-xl p-4 space-y-2">
-                <p className="font-heading text-xs tracking-widest text-pool-red mb-3">DANGER ZONE</p>
-                {game.is_complete && (
-                  <button onClick={adminReopenGame} disabled={saving}
-                    className="w-full py-3 rounded-xl border border-pool-border font-heading text-sm tracking-widest text-pool-chalk-dim hover:text-pool-chalk hover:border-pool-chalk/30 transition-all active:scale-95 disabled:opacity-40">
-                    {saving ? 'SAVING…' : '🔓 RE-OPEN GAME (keep shots)'}
-                  </button>
-                )}
-                <button onClick={adminResetGame} disabled={saving}
-                  className="w-full py-3 rounded-xl border border-pool-red/40 bg-pool-red/10 font-heading text-sm tracking-widest text-pool-red hover:bg-pool-red/20 transition-all active:scale-95 disabled:opacity-40">
-                  {saving ? 'SAVING…' : '🗑️ RESET ALL SHOTS & RESULT'}
-                </button>
-              </div>
-            </div>
-            <div className="h-6" />
-          </div>
-        </div>
+        <AdminPanel
+          p1={p1}
+          p2={p2}
+          shots={shots}
+          isComplete={game.is_complete}
+          saving={saving}
+          winnerId={adminWinnerId}
+          setWinnerId={setAdminWinnerId}
+          blackBall={adminBlackBall}
+          setBlackBall={setAdminBlackBall}
+          onClose={() => setAdminPanel(false)}
+          onSaveWinner={adminChangeWinner}
+          onReopen={adminReopenGame}
+          onReset={adminResetGame}
+          onDeleteShot={adminDeleteShot}
+        />
       )}
 
     </div>
