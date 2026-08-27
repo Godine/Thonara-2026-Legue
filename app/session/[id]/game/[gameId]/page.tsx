@@ -1,25 +1,28 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import {
-  fetchGame, fetchShotsForGame, fetchHistoricalShots, fetchH2H,
   setGameResult, clearGameResult, resetGame, updateGameMeta,
   insertShot, insertShots, deleteShot,
-  type GameWithPlayers,
 } from '@/lib/queries'
-import { getPlayerStats, formatTime, type PlayerStats } from '@/lib/stats'
+import { getPlayerStats, formatTime } from '@/lib/stats'
 import { computeOdds } from '@/lib/odds'
+import {
+  isPlayer1Turn, computeBreakInfo, currentStreak, loserBallsRemaining,
+} from '@/lib/game-logic'
 import { pickTrashTalk } from '@/lib/trash-talk'
 import { GAME_SCHEDULE, PLAYER_STYLES, type PlayerUsername } from '@/lib/game-config'
 import { getStoredPlayer } from '@/components/PlayerGate'
+import { useGameData } from '@/hooks/useGameData'
+import { useGameTimer } from '@/hooks/useGameTimer'
+import { usePendingShots } from '@/hooks/usePendingShots'
+import { useLongPress } from '@/hooks/useLongPress'
 import PlayerBall from '@/components/PlayerBall'
 import WinCelebration from '@/components/WinCelebration'
-import type { Player, Shot } from '@/types/database'
-
-type GameFull = GameWithPlayers
+import type { Shot } from '@/types/database'
 
 type ShotType = 'potted' | 'lucky' | 'miss' | 'error'
 
@@ -48,22 +51,14 @@ export default function GamePage() {
   const router = useRouter()
   const db = createClient()
 
-  const [game, setGame]                 = useState<GameFull | null>(null)
-  const [shots, setShots]               = useState<Shot[]>([])
-  const [loading, setLoading]           = useState(true)
   const [currentUsername, setCurrentUsername] = useState<PlayerUsername | null>(null)
   const [saving, setSaving]             = useState(false)
   const [endGame, setEndGame]           = useState<EndGameState>({ open: false, winnerId: '', blackBall: false })
   const [flash, setFlash]               = useState<{ playerId: string; type: ShotType } | null>(null)
-  const [histStats, setHistStats]       = useState<Record<string, { shots: number; potted: number }>>({})
-  const [h2hStats, setH2hStats]         = useState<{ p1Wins: number; p2Wins: number }>({ p1Wins: 0, p2Wins: 0 })
-  const [showCelebration, setShowCelebration] = useState(false)
   const [showOddsInfo, setShowOddsInfo]   = useState(false)
   const [adminPanel, setAdminPanel]       = useState(false)
   const [adminWinnerId, setAdminWinnerId] = useState('')
   const [adminBlackBall, setAdminBlackBall] = useState(false)
-  const [elapsed, setElapsed]           = useState(0)
-  const [timerStarted, setTimerStarted] = useState(false)
   const [breaker, setBreaker]           = useState<string | null>(null)
   const [breakYellows, setBreakYellows] = useState(0)
   const [breakReds, setBreakReds]       = useState(0)
@@ -71,80 +66,27 @@ export default function GamePage() {
   const [breakChosenColor, setBreakChosenColor] = useState<'yellow' | 'red' | null>(null)
   const [potPopup, setPotPopup]         = useState<PotPopupState | null>(null)
   const [colorAssignment, setColorAssignment] = useState<Record<string, 'yellow' | 'red'> | null>(null)
-  const [pendingCount, setPendingCount] = useState(0)
   const [manualActivePlayer, setManualActivePlayer] = useState<string | null>(null)
   const [inoffPopup, setInoffPopup]     = useState<{ playerId: string; ownBalls: number; oppBalls: number; cueBallIn: boolean } | null>(null)
   const [milestoneToasts, setMilestoneToasts] = useState<MilestoneToast[]>([])
-  const prevCompleteRef   = useRef<boolean | undefined>(undefined)
-  const timerStartRef     = useRef<number | null>(null)
-  const longPressTimer    = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const longPressTriggered = useRef(false)
-  const longPressErrTimer    = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const longPressErrTriggered = useRef(false)
-  const pendingQueue      = useRef<Array<Parameters<typeof insertShot>[1]>>([])
-  const flushingRef       = useRef(false)
 
-  const loadGame = useCallback(async () => {
-    const [gameData, shotsData] = await Promise.all([
-      fetchGame(db, gameId),
-      fetchShotsForGame(db, gameId),
-    ])
-    if (gameData) setGame(gameData)
-    setShots(shotsData)
-    setLoading(false)
-  }, [gameId]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Game data + realtime, elapsed timer, and the offline shot queue all live
+  // in dedicated hooks. Optimistic updates go through setShots/setGame.
+  const {
+    game, setGame,
+    shots, setShots,
+    loading,
+    histStats,
+    h2hStats,
+    showCelebration, setShowCelebration,
+    loadGame,
+  } = useGameData(db, gameId)
+  const { elapsed, started: timerStarted } = useGameTimer(shots, game?.is_complete)
+  const { pendingCount, enqueue, enqueueMany, dropLast } = usePendingShots(db)
 
   useEffect(() => {
     setCurrentUsername(getStoredPlayer())
-    loadGame()
-    const channel = db
-      .channel(`game-shots-${gameId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'shots', filter: `game_id=eq.${gameId}` }, loadGame)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` }, loadGame)
-      .subscribe()
-    return () => { db.removeChannel(channel) }
-  }, [gameId, loadGame]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!game) return
-    const p1id = game.player1.id
-    const p2id = game.player2.id
-    Promise.all([
-      fetchHistoricalShots(db, [p1id, p2id], gameId),
-      fetchH2H(db, p1id, p2id, gameId),
-    ]).then(([shotsData, h2h]) => {
-      const acc: Record<string, { shots: number; potted: number }> = {}
-      for (const s of shotsData) {
-        if (!acc[s.player_id]) acc[s.player_id] = { shots: 0, potted: 0 }
-        acc[s.player_id].shots++
-        acc[s.player_id].potted += s.balls_potted ?? (s.potted ? 1 : 0)
-      }
-      setHistStats(acc)
-      setH2hStats(h2h)
-    })
-  }, [game?.player1.id, game?.player2.id, gameId]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (game?.is_complete && prevCompleteRef.current === false) {
-      setShowCelebration(true)
-    }
-    prevCompleteRef.current = game?.is_complete ?? false
-  }, [game?.is_complete])
-
-  useEffect(() => {
-    if (shots.length > 0 && !timerStarted) {
-      timerStartRef.current = new Date(shots[0].created_at).getTime()
-      setTimerStarted(true)
-    }
-  }, [shots, timerStarted])
-
-  useEffect(() => {
-    if (!timerStarted || game?.is_complete) return
-    const tick = () => setElapsed(Math.floor((Date.now() - timerStartRef.current!) / 1000))
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [timerStarted, game?.is_complete])
+  }, [])
 
   useEffect(() => {
     if (colorAssignment !== null || shots.length === 0 || !game) return
@@ -220,31 +162,6 @@ export default function GamePage() {
     }
   }, [shots.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    async function flushPending() {
-      if (flushingRef.current || pendingQueue.current.length === 0) return
-      flushingRef.current = true
-      const queue = [...pendingQueue.current]
-      pendingQueue.current = []
-      setPendingCount(0)
-      const failed: typeof queue = []
-      for (const shot of queue) {
-        try {
-          await insertShot(db, shot) // eslint-disable-line react-hooks/exhaustive-deps
-        } catch {
-          failed.push(shot)
-        }
-      }
-      if (failed.length > 0) {
-        pendingQueue.current = [...failed, ...pendingQueue.current]
-        setPendingCount(pendingQueue.current.length)
-      }
-      flushingRef.current = false
-    }
-    window.addEventListener('online', flushPending)
-    return () => window.removeEventListener('online', flushPending)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
   const haptic = (pattern: number | number[]) => {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(pattern)
   }
@@ -295,8 +212,7 @@ export default function GamePage() {
     try {
       await insertShot(db, shotData)
     } catch {
-      pendingQueue.current.push(shotData)
-      setPendingCount(pendingQueue.current.length)
+      enqueue(shotData)
     }
     setSaving(false)
   }
@@ -378,65 +294,26 @@ export default function GamePage() {
     try {
       await insertShot(db, shotData)
     } catch {
-      pendingQueue.current.push(shotData)
-      setPendingCount(pendingQueue.current.length)
+      enqueue(shotData)
     }
     setSaving(false)
   }
 
-  const handlePotPressStart = (playerId: string) => {
-    if (!canEdit || saving) return
-    longPressTriggered.current = false
-    longPressTimer.current = setTimeout(() => {
-      longPressTriggered.current = true
+  // Tap = record shot; hold = open the multi-ball / foul popup for that player.
+  const potPress = useLongPress<string>({
+    onLongPress: (playerId) => {
       haptic([10, 5, 20])
       setPotPopup({ playerId, ownBalls: 1, oppBalls: 0 })
-    }, 400)
-  }
-
-  const handlePotPressEnd = (playerId: string) => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
-    if (!longPressTriggered.current) {
-      recordShot(playerId, 'potted')
-    }
-  }
-
-  const handlePotPressCancel = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
-  }
-
-  const handleErrPressStart = (playerId: string) => {
-    if (!canEdit || saving) return
-    longPressErrTriggered.current = false
-    longPressErrTimer.current = setTimeout(() => {
-      longPressErrTriggered.current = true
+    },
+    onClick: (playerId) => recordShot(playerId, 'potted'),
+  })
+  const errPress = useLongPress<string>({
+    onLongPress: (playerId) => {
       haptic([10, 5, 20])
       setInoffPopup({ playerId, ownBalls: 0, oppBalls: 0, cueBallIn: false })
-    }, 400)
-  }
-
-  const handleErrPressEnd = (playerId: string) => {
-    if (longPressErrTimer.current) {
-      clearTimeout(longPressErrTimer.current)
-      longPressErrTimer.current = null
-    }
-    if (!longPressErrTriggered.current) {
-      recordShot(playerId, 'error')
-    }
-  }
-
-  const handleErrPressCancel = () => {
-    if (longPressErrTimer.current) {
-      clearTimeout(longPressErrTimer.current)
-      longPressErrTimer.current = null
-    }
-  }
+    },
+    onClick: (playerId) => recordShot(playerId, 'error'),
+  })
 
   const recordBreak = async () => {
     const totalColored = breakYellows + breakReds
@@ -463,10 +340,7 @@ export default function GamePage() {
     try {
       await insertShots(db, rows)
     } catch {
-      rows.forEach(r => {
-        pendingQueue.current.push(r)
-      })
-      setPendingCount(pendingQueue.current.length)
+      enqueueMany(rows)
     }
     haptic((totalColored + (breakBlack ? 1 : 0)) > 0 ? [30, 15, 30] : 20)
     setSaving(false)
@@ -493,8 +367,7 @@ export default function GamePage() {
     setShots(prev => prev.filter(s => s.id !== lastShot.id))
     // Also remove from pending queue if it was never saved
     if (lastShot.id.startsWith('temp-')) {
-      pendingQueue.current = pendingQueue.current.slice(0, -1)
-      setPendingCount(pendingQueue.current.length)
+      dropLast()
       return
     }
     setSaving(true)
@@ -542,11 +415,7 @@ export default function GamePage() {
     if (!endGame.winnerId || saving) return
     setSaving(true)
     const loserId = endGame.winnerId === p1.id ? p2.id : p1.id
-    const loserPotted = shots
-      .filter(s => s.player_id === loserId && !s.is_error)
-      .reduce((sum, s) => sum + (s.balls_potted ?? (s.potted ? 1 : 0)), 0)
-    const loserBallsRemaining = Math.max(0, 7 - loserPotted)
-    await setGameResult(db, gameId, endGame.winnerId, endGame.blackBall, loserBallsRemaining)
+    await setGameResult(db, gameId, endGame.winnerId, endGame.blackBall, loserBallsRemaining(shots, loserId))
     haptic([80, 40, 80, 40, 150])
     setSaving(false)
     setEndGame(e => ({ ...e, open: false }))
@@ -576,26 +445,7 @@ export default function GamePage() {
   const p1Stats = getPlayerStats(shots, p1.id)
   const p2Stats = getPlayerStats(shots, p2.id)
 
-  // Whose turn: a pot (no foul) keeps the shooter's turn, a miss switches it.
-  // A foul (error) switches the turn AND grants the new player an extra "free"
-  // shot — their first miss on that extra turn doesn't switch it back.
-  const isP1Turn = (() => {
-    if (shots.length === 0) return true
-    const sorted = [...shots].sort((a, b) => a.shot_number - b.shot_number)
-    let currentPlayerId = sorted[0].player_id
-    let extraTurn = false
-    for (const s of sorted) {
-      const potted = ((s.balls_potted ?? (s.potted ? 1 : 0)) > 0) && !s.is_error
-      if (s.is_error) {
-        currentPlayerId = currentPlayerId === p1.id ? p2.id : p1.id
-        extraTurn = true
-      } else if (!potted) {
-        if (extraTurn) extraTurn = false
-        else currentPlayerId = currentPlayerId === p1.id ? p2.id : p1.id
-      }
-    }
-    return currentPlayerId === p1.id
-  })()
+  const isP1Turn = isPlayer1Turn(shots, p1.id, p2.id)
 
   const odds = computeOdds(
     shots, p1.id, p2.id,
@@ -609,23 +459,10 @@ export default function GamePage() {
   const schedule = GAME_SCHEDULE.find(g => g.gameNumber === game.game_number)
 
   // Break: first consecutive potted shots by whoever shot first
-  const breakInfo = (() => {
-    if (shots.length === 0) return null
-    const sorted = [...shots].sort((a, b) => a.shot_number - b.shot_number)
-    const breakerId = sorted[0].player_id
-    let pots = 0, yellows = 0, reds = 0, black = false
-    for (const s of sorted) {
-      if (s.player_id !== breakerId) break
-      const sp  = s.balls_potted ?? (s.potted ? 1 : 0)
-      const opp = s.opponent_balls_potted ?? 0
-      if (sp === 0 && opp === 0) break
-      pots += sp + opp
-      if (s.ball_color === 'yellow')      { yellows += sp; reds    += opp }
-      else if (s.ball_color === 'red')    { reds    += sp; yellows += opp }
-      else if (s.ball_color === 'black')  { black = true }
-    }
-    return { pots, yellows, reds, black, breakPlayer: breakerId === p1.id ? p1 : p2 }
-  })()
+  const breakInfoRaw = computeBreakInfo(shots)
+  const breakInfo = breakInfoRaw
+    ? { ...breakInfoRaw, breakPlayer: breakInfoRaw.breakerId === p1.id ? p1 : p2 }
+    : null
 
   const gameDuration = shots.length >= 2
     ? Math.floor(
@@ -636,18 +473,7 @@ export default function GamePage() {
   const effectiveActivePlayerId = manualActivePlayer ?? (isP1Turn ? p1.id : p2.id)
 
   // Consecutive pots by the current active player (streak display)
-  const activePlayerStreak = (() => {
-    const pid = effectiveActivePlayerId
-    let streak = 0
-    for (let i = shots.length - 1; i >= 0; i--) {
-      const s = shots[i]
-      if (s.player_id !== pid) break
-      const b = s.balls_potted ?? (s.potted ? 1 : 0)
-      if (b === 0 || s.is_error) break
-      streak++
-    }
-    return streak
-  })()
+  const activePlayerStreak = currentStreak(shots, effectiveActivePlayerId)
 
   const trashTalkLine = game.winner ? (() => {
     const wStats = game.winner_id === p1.id ? p1Stats : p2Stats
@@ -1031,10 +857,10 @@ export default function GamePage() {
               <div className="grid grid-cols-2 gap-2 mb-2">
                 {/* POT — top left */}
                 <button
-                  onPointerDown={() => handlePotPressStart(effectiveActivePlayerId)}
-                  onPointerUp={() => handlePotPressEnd(effectiveActivePlayerId)}
-                  onPointerLeave={handlePotPressCancel}
-                  onPointerCancel={handlePotPressCancel}
+                  onPointerDown={() => potPress.start(effectiveActivePlayerId, !canEdit || saving)}
+                  onPointerUp={() => potPress.end(effectiveActivePlayerId)}
+                  onPointerLeave={potPress.cancel}
+                  onPointerCancel={potPress.cancel}
                   disabled={saving}
                   className="shot-btn py-5 rounded-xl border font-heading text-xl tracking-wider flex flex-col items-center justify-center gap-0.5 transition-all disabled:opacity-50 select-none bg-pool-green-bright/20 border-pool-green-bright/50 text-pool-green-bright hover:bg-pool-green-bright/30 active:bg-pool-green-bright/40"
                 >
@@ -1065,10 +891,10 @@ export default function GamePage() {
 
                 {/* ERR — bottom right, hold for in-off */}
                 <button
-                  onPointerDown={() => handleErrPressStart(effectiveActivePlayerId)}
-                  onPointerUp={() => handleErrPressEnd(effectiveActivePlayerId)}
-                  onPointerLeave={handleErrPressCancel}
-                  onPointerCancel={handleErrPressCancel}
+                  onPointerDown={() => errPress.start(effectiveActivePlayerId, !canEdit || saving)}
+                  onPointerUp={() => errPress.end(effectiveActivePlayerId)}
+                  onPointerLeave={errPress.cancel}
+                  onPointerCancel={errPress.cancel}
                   disabled={saving}
                   className="shot-btn py-5 rounded-xl border font-heading text-xl tracking-wider flex flex-col items-center justify-center gap-0.5 transition-all disabled:opacity-50 select-none bg-pool-red/15 border-pool-red/40 text-pool-red hover:bg-pool-red/25 active:bg-pool-red/35"
                 >
