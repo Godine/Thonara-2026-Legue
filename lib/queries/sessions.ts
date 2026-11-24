@@ -58,6 +58,7 @@ export async function fetchLiveGame(db: SupabaseClient): Promise<LiveGame | null
       )
     `)
     .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
@@ -94,6 +95,7 @@ export async function fetchRecentSession(db: SupabaseClient) {
       )
     `)
     .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
   return data
@@ -104,21 +106,30 @@ export async function fetchAllSessions(db: SupabaseClient, limit = 20): Promise<
     .from('sessions')
     .select(SESSION_WITH_GAMES)
     .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(limit)
   return (data as SessionFull[]) ?? []
 }
 
+// Returns the most recent IN-PROGRESS session for the date, if any.
+// A fully-complete session is treated as "no session today" so the user can
+// start a second session on the same day.
 export async function findSessionByDate(db: SupabaseClient, date: string) {
   const { data } = await db
     .from('sessions')
-    .select('id, games(id)')
+    .select('id, games(id, is_complete)')
     .eq('date', date)
-    .maybeSingle()
-  if (!data) return null
-  // Ignore orphaned sessions where game creation failed
-  const gameCount = Array.isArray((data as any).games) ? (data as any).games.length : 0
-  if (gameCount === 0) return null
-  return { id: data.id } as { id: string }
+    .order('created_at', { ascending: false })
+  if (!data || data.length === 0) return null
+  for (const s of data as any[]) {
+    const games = Array.isArray(s.games) ? s.games : []
+    // Skip orphaned sessions where game creation failed
+    if (games.length === 0) continue
+    // Skip fully-complete sessions so the user can start a second one today
+    if (games.every((g: any) => g.is_complete)) continue
+    return { id: s.id } as { id: string }
+  }
+  return null
 }
 
 type CreateSessionResult = { ok: true; id: string } | { ok: false; error: string }

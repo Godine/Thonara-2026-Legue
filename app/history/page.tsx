@@ -188,8 +188,23 @@ export default async function HistoryPage() {
 
                 {/* ── Session cards ───────────────────────────────────── */}
                 <div className="space-y-3">
-                  {seasonSessions.map(session => {
+                  {(() => {
+                    // Number same-day sessions chronologically (1, 2, …)
+                    const dateCounts: Record<string, number> = {}
+                    for (const s of seasonSessions) dateCounts[s.date] = (dateCounts[s.date] ?? 0) + 1
+                    const ordinal: Record<string, number> = {}
+                    const running: Record<string, number> = {}
+                    // seasonSessions is newest-first; walk oldest-first to assign ordinals
+                    for (let i = seasonSessions.length - 1; i >= 0; i--) {
+                      const s = seasonSessions[i]
+                      if (dateCounts[s.date] > 1) {
+                        running[s.date] = (running[s.date] ?? 0) + 1
+                        ordinal[s.id] = running[s.date]
+                      }
+                    }
+                    return seasonSessions.map(session => {
                     const sortedGames = [...session.games].sort((a, b) => a.game_number - b.game_number)
+                    const sessionOrdinal = ordinal[session.id]
                     const completedGames = sortedGames.filter(g => g.is_complete)
                     const sessionWins: Record<string, number> = {}
                     for (const g of completedGames) {
@@ -212,6 +227,11 @@ export default async function HistoryPage() {
                           <div>
                             <p className="font-heading text-base tracking-wider text-pool-chalk">
                               {format(new Date(session.date + 'T12:00:00'), 'EEE, MMM d').toUpperCase()}
+                              {sessionOrdinal && (
+                                <span className="ml-2 font-body text-[10px] tracking-widest text-pool-gold/80 border border-pool-gold/30 rounded-full px-1.5 py-0.5 align-middle">
+                                  #{sessionOrdinal}
+                                </span>
+                              )}
                             </p>
                             <p className="text-xs font-body text-pool-chalk-dim mt-0.5">
                               {completedGames.length}/{sortedGames.length} games
@@ -266,7 +286,8 @@ export default async function HistoryPage() {
                         )}
                       </div>
                     )
-                  })}
+                  })
+                  })()}
                 </div>
               </div>
             )
